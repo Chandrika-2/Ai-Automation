@@ -1,0 +1,27 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'SecComply ISMS - Read-only IAM user for AWS security posture scanning. Creates a user with SecurityAudit + ViewOnlyAccess policies and outputs access keys.'
+
+Resources:
+  SecComplyScanner:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: SecComplyScanner
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SecurityAudit
+        - arn:aws:iam::aws:policy/job-function/ViewOnlyAccess
+
+  SecComplyAccessKey:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref SecComplyScanner
+
+Outputs:
+  AccessKeyId:
+    Description: 'Access Key ID - enter this in SecComply ISMS Cloud Security tab'
+    Value: !Ref SecComplyAccessKey
+  SecretAccessKey:
+    Description: 'Secret Access Key - enter this in SecComply ISMS Cloud Security tab'
+    Value: !GetAtt SecComplyAccessKey.SecretAccessKey
+  UserARN:
+    Description: 'ARN of the SecComply Scanner user'
+    Value: !GetAtt SecComplyScanner.Arn

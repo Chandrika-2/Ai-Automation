@@ -824,7 +824,7 @@ const Dashboard = ({data}) => {
   // Vendor/TPRA stats
   const vendorStats = useMemo(()=>{
     const vendors=data.vendors||[];
-    const assessed=vendors.filter(v=>(v.answers&&Object.keys(v.answers).length>0)||v.score>0||v.scan_report);
+    const assessed=vendors.filter(v=>v.scan_report?.risk_score);
     return{total:vendors.length,assessed:assessed.length,pct:vendors.length>0?Math.round((assessed.length/vendors.length)*100):0};
   },[data.vendors]);
 
@@ -5906,33 +5906,7 @@ const ClientAdminDashboard = ({data,rbac,orgId,members}) => {
 // THIRD PARTY RISK ASSESSMENT (TPRA)
 // =============================================
 
-// Vendor Security Questionnaire (15 questions across key domains)
-const VENDOR_QUESTIONS = [
-  {id:"q1", domain:"Data Protection", q:"Does the vendor encrypt data at rest and in transit?", weight:3},
-  {id:"q2", domain:"Data Protection", q:"Does the vendor have a documented data classification policy?", weight:2},
-  {id:"q3", domain:"Data Protection", q:"Does the vendor have data retention and disposal procedures?", weight:2},
-  {id:"q4", domain:"Access Control", q:"Does the vendor implement role-based access control (RBAC)?", weight:3},
-  {id:"q5", domain:"Access Control", q:"Does the vendor enforce multi-factor authentication (MFA)?", weight:3},
-  {id:"q6", domain:"Incident Management", q:"Does the vendor have a documented incident response plan?", weight:3},
-  {id:"q7", domain:"Incident Management", q:"Will the vendor notify you of security breaches within 72 hours?", weight:3},
-  {id:"q8", domain:"Business Continuity", q:"Does the vendor have a business continuity/disaster recovery plan?", weight:2},
-  {id:"q9", domain:"Business Continuity", q:"Does the vendor perform regular backups with tested recovery?", weight:2},
-  {id:"q10", domain:"Compliance", q:"Does the vendor hold ISO 27001 or SOC 2 certification?", weight:3},
-  {id:"q11", domain:"Compliance", q:"Does the vendor comply with applicable data protection laws (DPDP/GDPR)?", weight:3},
-  {id:"q12", domain:"Network Security", q:"Does the vendor perform regular vulnerability assessments and penetration testing?", weight:2},
-  {id:"q13", domain:"Network Security", q:"Does the vendor have firewall and intrusion detection/prevention systems?", weight:2},
-  {id:"q14", domain:"HR & Physical", q:"Does the vendor conduct background checks on employees with data access?", weight:2},
-  {id:"q15", domain:"HR & Physical", q:"Does the vendor have physical security controls for data centers/offices?", weight:1},
-];
-
-const VENDOR_ANSWER_OPTIONS = [
-  {value:"yes", label:"Yes", score:1, color:"#16a34a"},
-  {value:"partial", label:"Partially", score:0.5, color:"#f59e0b"},
-  {value:"no", label:"No", score:0, color:"#ef4444"},
-  {value:"na", label:"N/A", score:null, color:"#94a3b8"},
-  {value:"unknown", label:"Unknown", score:0, color:"#64748b"},
-];
-
+// Vendor Risk - Attack Surface Scanner (questionnaire removed, URL-based scanning)
 const VENDOR_CATEGORIES = ["Cloud/SaaS","IT Services","Consulting","Payroll/HR","Legal","Financial","Marketing","Logistics","Telecom","Other"];
 const CRITICALITY_OPTIONS = [{value:"critical",label:"Critical",color:"#ef4444"},{value:"high",label:"High",color:"#f97316"},{value:"medium",label:"Medium",color:"#f59e0b"},{value:"low",label:"Low",color:"#16a34a"}];
 const DATA_TYPES = ["Personal Data","Financial Data","Health Data","IP/Trade Secrets","Customer Data","Employee Data","Public Data Only","No Data Access"];
@@ -5949,11 +5923,13 @@ const COMPLIANCE_DOCS = [
 ];
 
 const VendorRiskModule = ({data,setData,role:userRole}) => {
-  const [tab,setTab]=useState("dashboard"); // dashboard|registry|assess|detail
+  const [tab,setTab]=useState("dashboard");
   const [selVendorId,setSelVendorId]=useState(null);
-  const [modal,setModal]=useState(null); // {type:"vendor"|"doc", data:{...}}
+  const [modal,setModal]=useState(null);
   const [toast,setToast]=useState(null);
   const [search,setSearch]=useState("");
+  const [scanning,setScanning]=useState(null); // vendorId being scanned
+  const [scanProgress,setScanProgress]=useState("");
   const {token,user,orgId}=useAuth();
   const isAdmin=["super_admin","employee","client_admin"].includes(userRole);
   const vendors=data.vendors||[];
@@ -5963,7 +5939,7 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
     if(v.id){
       setData(d=>({...d,vendors:d.vendors.map(x=>x.id===v.id?v:x)}));
     } else {
-      const nv={...v,id:secureId('vnd'),answers:{},docs:{},created_at:new Date().toISOString(),created_by:user?.email};
+      const nv={...v,id:secureId('vnd'),docs:{},created_at:new Date().toISOString(),created_by:user?.email};
       setData(d=>({...d,vendors:[...d.vendors,nv]}));
       setSelVendorId(nv.id);
     }
@@ -5971,13 +5947,35 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
   };
   const delVendor=(id)=>{setData(d=>({...d,vendors:d.vendors.filter(v=>v.id!==id)}));if(selVendorId===id)setSelVendorId(null);setToast({msg:"Vendor removed",type:"success"});};
 
-  // ===== QUESTIONNAIRE =====
-  const setAnswer=(vendorId,qId,answer)=>{
-    setData(d=>({...d,vendors:d.vendors.map(v=>{
-      if(v.id!==vendorId)return v;
-      const answers={...(v.answers||{}), [qId]:answer};
-      return{...v, answers, assessed_at:new Date().toISOString()};
-    })}));
+  // ===== ATTACK SURFACE SCAN =====
+  const runScan=async(vendorId)=>{
+    const v=vendors.find(x=>x.id===vendorId);
+    if(!v?.website){setToast({msg:"Add a website URL to this vendor first",type:"error"});return;}
+    setScanning(vendorId);setScanProgress("Initializing scan...");
+    try{
+      setScanProgress("Scanning SSL/TLS, DNS, HTTP Headers, Email Security...");
+      const resp=await fetch("/api/vendor-scan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({domain:v.website})});
+      if(!resp.ok){const e=await resp.json();throw new Error(e.error||"Scan failed");}
+      const report=await resp.json();
+      setData(d=>({...d,vendors:d.vendors.map(x=>x.id===vendorId?{...x,scan_report:report,scanned_at:new Date().toISOString()}:x)}));
+      setToast({msg:`Scan complete! Score: ${report.risk_score?.overall_score}/100 (${report.risk_score?.letter_grade})`,type:"success"});
+      setTab("report");
+    }catch(e){setToast({msg:`Scan failed: ${e.message}`,type:"error"});}
+    setScanning(null);setScanProgress("");
+  };
+
+  // ===== RISK SCORING from scan =====
+  const getVendorRisk=(vendor)=>{
+    const sr=vendor.scan_report?.risk_score;
+    if(!sr)return{score:0,pct:0,rating:"Not Scanned",color:C.textDim,scanned:false};
+    const pct=sr.overall_score;
+    let color;
+    if(pct>=80)color=C.green;else if(pct>=60)color=C.yellow;else if(pct>=40)color=C.orange;else color=C.red;
+    // Factor in business criticality
+    let rating=sr.risk_level;
+    if(vendor.criticality==="critical"&&pct<80){rating="Critical Risk";color=C.red;}
+    if(vendor.criticality==="high"&&pct<60){rating="High Risk";color=C.orange;}
+    return{score:pct,pct,rating,color,scanned:true,grade:sr.letter_grade,findings:sr.findings_summary};
   };
 
   // ===== COMPLIANCE DOCS =====
@@ -5989,72 +5987,38 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
     })}));
   };
 
-  // ===== RISK SCORING (scan results OR questionnaire fallback) =====
-  const calcRiskScore=(vendor)=>{
-    const scan=vendor.scan_report;
-    if(scan&&scan.risk_score){
-      const rs=scan.risk_score;
-      return{score:rs.overall_score,pct:rs.overall_score,rating:rs.risk_level,
-        color:rs.overall_score>=80?C.green:rs.overall_score>=60?C.yellow:rs.overall_score>=40?C.orange:C.red,
-        answeredCount:rs.findings_summary?.total||0,grade:rs.letter_grade,fromScan:true};
-    }
-    const answers=vendor.answers||{};
-    let totalWeight=0, totalScore=0, answeredCount=0;
-    VENDOR_QUESTIONS.forEach(q=>{
-      const a=answers[q.id];
-      if(!a||a==="na") return;
-      answeredCount++;
-      const opt=VENDOR_ANSWER_OPTIONS.find(o=>o.value===a);
-      if(opt&&opt.score!==null){totalWeight+=q.weight;totalScore+=opt.score*q.weight;}
-    });
-    if(totalWeight===0) return{score:0,pct:0,rating:"Not Assessed",color:C.textDim,answeredCount,fromScan:false};
-    const pct=Math.round((totalScore/totalWeight)*100);
-    let rating,color;
-    if(pct>=80){rating="Low Risk";color=C.green;}
-    else if(pct>=60){rating="Medium Risk";color=C.yellow;}
-    else if(pct>=40){rating="High Risk";color=C.orange;}
-    else{rating="Critical Risk";color=C.red;}
-    if(vendor.criticality==="critical"&&pct<80){rating="Critical Risk";color=C.red;}
-    if(vendor.criticality==="high"&&pct<60){rating="High Risk";color=C.orange;}
-    return{score:totalScore,pct,rating,color,answeredCount,fromScan:false};
-  };
-
   // ===== STATS =====
   const stats=useMemo(()=>{
-    let total=vendors.length, assessed=0, critical=0, high=0, medium=0, low=0, docsComplete=0;
+    let total=vendors.length,scanned=0,critical=0,high=0,medium=0,low=0,docsComplete=0;
     vendors.forEach(v=>{
-      const r=calcRiskScore(v);
-      if(r.answeredCount>0||v.scan_report) assessed++;
-      if(r.rating==="Critical Risk") critical++;
-      else if(r.rating==="High Risk") high++;
-      else if(r.rating==="Medium Risk") medium++;
-      else if(r.rating==="Low Risk") low++;
-      // Docs completeness
+      const r=getVendorRisk(v);
+      if(r.scanned)scanned++;
+      if(r.rating==="Critical Risk")critical++;
+      else if(r.rating==="High Risk")high++;
+      else if(r.rating==="Moderate Risk")medium++;
+      else if(r.rating==="Low Risk")low++;
       const docCount=COMPLIANCE_DOCS.filter(d=>(v.docs||{})[d.id]?.status==="received").length;
-      if(docCount>=4) docsComplete++;
+      if(docCount>=4)docsComplete++;
     });
-    return{total,assessed,critical,high,medium,low,docsComplete};
+    return{total,scanned,critical,high,medium,low,docsComplete};
   },[vendors]);
 
-  // ===== FILTERED =====
   const filtered=useMemo(()=>{
-    if(!search) return vendors;
+    if(!search)return vendors;
     const q=search.toLowerCase();
-    return vendors.filter(v=>(v.name||"").toLowerCase().includes(q)||(v.category||"").toLowerCase().includes(q));
+    return vendors.filter(v=>(v.name||"").toLowerCase().includes(q)||(v.category||"").toLowerCase().includes(q)||(v.website||"").toLowerCase().includes(q));
   },[vendors,search]);
 
   const selVendor=vendors.find(v=>v.id===selVendorId);
 
   // ===== VENDOR FORM MODAL =====
   const VendorFormModal=({v,onSave})=>{
-    const [f,setF]=useState({name:"",category:"Cloud/SaaS",service_description:"",criticality:"medium",data_types:[],contact_name:"",contact_email:"",contract_start:"",contract_end:"",notes:"",...v});
+    const [f,setF]=useState({name:"",website:"",category:"Cloud/SaaS",service_description:"",criticality:"medium",data_types:[],contact_name:"",contact_email:"",contract_start:"",contract_end:"",notes:"",...v});
     const u=(k,val)=>setF(x=>({...x,[k]:val}));
-    const toggleDataType=(dt)=>{
-      setF(x=>({...x,data_types:(x.data_types||[]).includes(dt)?(x.data_types||[]).filter(d=>d!==dt):[...(x.data_types||[]),dt]}));
-    };
+    const toggleDataType=(dt)=>{setF(x=>({...x,data_types:(x.data_types||[]).includes(dt)?(x.data_types||[]).filter(d=>d!==dt):[...(x.data_types||[]),dt]}));};
     return(<div>
       <Input label="Vendor Name *" value={f.name} onChange={v=>u("name",v)} placeholder="e.g., Amazon Web Services"/>
-      <Input label="Website URL *" value={f.website_url||""} onChange={v=>u("website_url",v)} placeholder="e.g., https://aws.amazon.com"/>
+      <Input label="Website URL *" value={f.website} onChange={v=>u("website",v)} placeholder="e.g., aws.amazon.com or https://aws.amazon.com"/>
       <Input label="Service Description" value={f.service_description} onChange={v=>u("service_description",v)} placeholder="e.g., Cloud hosting for production infrastructure"/>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         <Input label="Category" value={f.category} onChange={v=>u("category",v)} select options={VENDOR_CATEGORIES.map(c=>({value:c,label:c}))}/>
@@ -6080,7 +6044,7 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
       <Input label="Notes" value={f.notes} onChange={v=>u("notes",v)} textarea placeholder="Any additional notes..."/>
       <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:16}}>
         <Btn variant="secondary" onClick={()=>setModal(null)}>Cancel</Btn>
-        <Btn onClick={()=>{if(!f.name)return setToast({msg:"Vendor name required",type:"error"});onSave(f);}}><Save size={14}/> Save</Btn>
+        <Btn onClick={()=>{if(!f.name)return setToast({msg:"Vendor name required",type:"error"});if(!f.website)return setToast({msg:"Website URL required for scanning",type:"error"});onSave(f);}}><Save size={14}/> Save</Btn>
       </div>
     </div>);
   };
@@ -6088,20 +6052,76 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
   // ===== EXPORT =====
   const exportVendors=()=>{
     const rows=vendors.map(v=>{
-      const r=calcRiskScore(v);
+      const r=getVendorRisk(v);
       const docStatus=COMPLIANCE_DOCS.map(d=>`${d.name}: ${(v.docs||{})[d.id]?.status||'pending'}`).join('; ');
-      return{"Vendor":v.name,"Website":v.website_url||"","Category":v.category,"Criticality":v.criticality,"Data Types":(v.data_types||[]).join(', '),"Risk Score":r.pct+"%","Risk Rating":r.rating,"Source":r.fromScan?"Scan":"Questionnaire","Questions Answered":r.answeredCount+"/"+VENDOR_QUESTIONS.length,"Contract Start":v.contract_start||"","Contract End":v.contract_end||"","Documents":docStatus,"Contact":v.contact_name||"","Email":v.contact_email||""};
+      return{"Vendor":v.name,"Website":v.website||"","Category":v.category,"Criticality":v.criticality,"Data Types":(v.data_types||[]).join(', '),"Scan Score":r.scanned?r.pct+"%":"Not Scanned","Risk Rating":r.rating,"Grade":r.grade||"—","Critical Findings":r.findings?.critical||0,"High Findings":r.findings?.high||0,"Contract Start":v.contract_start||"","Contract End":v.contract_end||"","Documents":docStatus,"Contact":v.contact_name||"","Email":v.contact_email||""};
     });
     const wb=XLSX.utils.book_new();
     const ws=XLSX.utils.json_to_sheet(rows);
-    ws["!cols"]=[{wch:25},{wch:12},{wch:10},{wch:30},{wch:10},{wch:14},{wch:16},{wch:12},{wch:12},{wch:50},{wch:20},{wch:25}];
+    ws["!cols"]=[{wch:25},{wch:25},{wch:12},{wch:10},{wch:30},{wch:10},{wch:14},{wch:6},{wch:8},{wch:8},{wch:12},{wch:12},{wch:50},{wch:20},{wch:25}];
     XLSX.utils.book_append_sheet(wb,ws,"Vendor Risk");
     XLSX.writeFile(wb,"Vendor_Risk_Assessment.xlsx");
     auditLog(token,"data_export",{resource_type:"vendor_risk",org_id:orgId},"warning");
   };
 
+  // ===== DOWNLOAD SCAN REPORT =====
+  const downloadReport=(vendor)=>{
+    if(!vendor.scan_report)return;
+    const blob=new Blob([JSON.stringify(vendor.scan_report,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download=`${vendor.name.replace(/\s+/g,"_")}_Attack_Surface_Report.json`;
+    a.click();URL.revokeObjectURL(url);
+  };
+
+  const downloadHtmlReport=(vendor)=>{
+    if(!vendor.scan_report)return;
+    const rpt=vendor.scan_report;
+    const rs=rpt.risk_score;
+    const scoreColor=rs.overall_score>=80?"#22c55e":rs.overall_score>=60?"#f59e0b":rs.overall_score>=40?"#f97316":"#ef4444";
+    const sevColors={critical:"#dc2626",high:"#ea580c",medium:"#d97706",low:"#2563eb",info:"#6b7280"};
+    let findingsHtml="";
+    (rpt.scan_results||[]).forEach(sr=>{
+      findingsHtml+=`<div style="background:#1e293b;border-radius:12px;padding:20px;margin-bottom:16px;"><h3 style="color:#cbd5e1;margin:0 0 12px;font-size:16px;">${sr.scanner} (${sr.findings_count} findings)</h3>`;
+      (sr.findings||[]).forEach(f=>{
+        const sc=sevColors[f.severity]||"#6b7280";
+        findingsHtml+=`<div style="background:#0f172a;border-left:4px solid ${sc};border-radius:8px;padding:12px 16px;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><span style="background:${sc};color:white;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;text-transform:uppercase;">${f.severity}</span><strong style="color:#e2e8f0;">${f.title}</strong></div>
+          <p style="color:#94a3b8;margin:4px 0;font-size:13px;">${f.description}</p>
+          ${f.evidence?`<p style="font-size:12px;color:#64748b;font-family:monospace;background:#1e293b;padding:6px 8px;border-radius:4px;margin:4px 0;"><strong>Evidence:</strong> ${f.evidence}</p>`:""}
+          ${f.recommendation?`<p style="font-size:12px;color:#22d3ee;margin:4px 0;"><strong>Fix:</strong> ${f.recommendation}</p>`:""}
+        </div>`;
+      });
+      findingsHtml+="</div>";
+    });
+    const html=`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Attack Surface Report - ${rpt.meta.domain}</title>
+    <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;line-height:1.6}.container{max-width:1100px;margin:0 auto;padding:2rem}
+    .header{text-align:center;padding:2.5rem 0;border-bottom:1px solid #1e293b}h1{font-size:1.8rem}h2{font-size:1.3rem;margin:1.5rem 0 1rem;color:#94a3b8}
+    .score-circle{width:140px;height:140px;border-radius:50%;border:6px solid ${scoreColor};display:flex;flex-direction:column;align-items:center;justify-content:center;margin:1.5rem auto}
+    .score-number{font-size:2.5rem;font-weight:bold;color:${scoreColor}}.score-grade{font-size:1.1rem;color:${scoreColor}}
+    .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:1.5rem 0}.stat{background:#1e293b;padding:16px;border-radius:10px;text-align:center}
+    .stat-number{font-size:1.8rem;font-weight:bold}.stat-label{font-size:12px;color:#94a3b8;margin-top:4px}
+    .meta{text-align:center;color:#64748b;font-size:12px;margin-top:2rem;padding-top:1.5rem;border-top:1px solid #1e293b}
+    @media print{body{background:white;color:#1e293b}.container{padding:1rem}.header{border-color:#e2e8f0}.stat,.scanner-section div{background:#f8fafc!important}}</style></head>
+    <body><div class="container"><div class="header"><h1>Attack Surface Report</h1><div style="color:#38bdf8;font-size:1.3rem;margin-top:4px">${rpt.meta.domain}</div>
+    <div class="score-circle"><div class="score-number">${rs.overall_score}</div><div class="score-grade">${rs.letter_grade}</div></div>
+    <div style="font-size:1.2rem;color:${scoreColor};font-weight:600">${rs.risk_level}</div></div>
+    <div class="stats">
+    <div class="stat"><div class="stat-number" style="color:#dc2626">${rs.findings_summary.critical}</div><div class="stat-label">Critical</div></div>
+    <div class="stat"><div class="stat-number" style="color:#ea580c">${rs.findings_summary.high}</div><div class="stat-label">High</div></div>
+    <div class="stat"><div class="stat-number" style="color:#d97706">${rs.findings_summary.medium}</div><div class="stat-label">Medium</div></div>
+    <div class="stat"><div class="stat-number" style="color:#2563eb">${rs.findings_summary.low}</div><div class="stat-label">Low</div></div>
+    <div class="stat"><div class="stat-number" style="color:#6b7280">${rs.findings_summary.info}</div><div class="stat-label">Info</div></div></div>
+    <h2>Detailed Findings</h2>${findingsHtml}
+    <div class="meta"><p>Scanned: ${rpt.meta.scan_date?.substring(0,19)} UTC | Duration: ${rpt.meta.scan_duration_seconds}s</p><p>SecComply Attack Surface Scanner v1.0</p></div></div></body></html>`;
+    const blob=new Blob([html],{type:"text/html"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download=`${vendor.name.replace(/\s+/g,"_")}_Attack_Surface_Report.html`;
+    a.click();URL.revokeObjectURL(url);
+  };
+
   const fmtDate=(d)=>d?new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):"—";
-  const critColor=(c)=>(CRITICALITY_OPTIONS.find(o=>o.value===c)||{}).color||C.textMuted;
+  const critColor=(c)=>(CRITICALITY_OPTIONS.find(o=>o.value===c)||{}).color||C.textDim;
+  const sevColors={critical:C.red,high:C.orange,medium:C.yellow,low:C.blue,info:C.textDim};
 
   return (<div>
     {toast&&<Toast {...toast} onClose={()=>setToast(null)}/>}
@@ -6110,7 +6130,7 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:12}}>
       <div>
         <h2 style={{margin:0,fontSize:22,fontWeight:800,color:C.text}}>Third Party Risk Assessment</h2>
-        <p style={{margin:"4px 0 0",fontSize:13,color:C.textMuted}}>Vendor registry, security assessment & compliance tracking</p>
+        <p style={{margin:"4px 0 0",fontSize:13,color:C.textMuted}}>Vendor registry, attack surface scanning & compliance tracking</p>
       </div>
       <div style={{display:"flex",gap:8}}>
         {vendors.length>0&&<Btn variant="secondary" onClick={exportVendors}><Download size={14}/> Export</Btn>}
@@ -6122,10 +6142,10 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
     {vendors.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:12,marginBottom:20}}>
       {[
         {label:"Total Vendors",val:stats.total,col:C.text},
-        {label:"Assessed",val:stats.assessed,col:C.blue},
+        {label:"Scanned",val:stats.scanned,col:C.blue},
         {label:"Critical",val:stats.critical,col:C.red},
         {label:"High Risk",val:stats.high,col:C.orange},
-        {label:"Medium Risk",val:stats.medium,col:C.yellow},
+        {label:"Moderate",val:stats.medium,col:C.yellow},
         {label:"Low Risk",val:stats.low,col:C.green},
       ].map(s=><div key={s.label} style={{background:C.card,borderRadius:10,padding:"12px 14px",border:`1px solid ${s.col}22`}}>
         <div style={{fontSize:11,color:C.textMuted,fontWeight:600}}>{s.label}</div>
@@ -6136,7 +6156,7 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
     {/* Tabs */}
     <div style={{display:"flex",gap:4,marginBottom:20,background:C.card,borderRadius:10,padding:4,width:"fit-content",flexWrap:"wrap"}}>
       {[{id:"dashboard",label:"Dashboard"},{id:"registry",label:"Vendor Registry"},
-        ...(selVendorId?[{id:"assess",label:"Assessment"},{id:"detail",label:"Details"}]:[])
+        ...(selVendorId?[{id:"scan",label:"Scan"},{id:"report",label:"Report"},{id:"detail",label:"Details"}]:[])
       ].map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"8px 20px",border:"none",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:13,background:tab===t.id?C.orange:"transparent",color:tab===t.id?"#fff":C.textMuted,fontFamily:"inherit"}}>{t.label}</button>)}
     </div>
 
@@ -6146,7 +6166,7 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
         <div style={{textAlign:"center",padding:30}}>
           <div style={{width:64,height:64,borderRadius:"50%",background:`${C.orange}22`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Flag size={32} color={C.orange}/></div>
           <h3 style={{color:C.text,margin:"0 0 8px",fontSize:18,fontWeight:800}}>Third Party Risk Assessment</h3>
-          <p style={{color:C.textMuted,fontSize:13,margin:"0 0 20px",maxWidth:450,marginLeft:"auto",marginRight:"auto"}}>Add your vendors and assess their security posture with a standardized questionnaire. Track compliance documents and monitor risk levels.</p>
+          <p style={{color:C.textMuted,fontSize:13,margin:"0 0 20px",maxWidth:450,marginLeft:"auto",marginRight:"auto"}}>Add your vendors with their website URL and run automated attack surface scans to assess their security posture. Track compliance documents and monitor risk levels.</p>
           {isAdmin&&<Btn onClick={()=>setModal({type:"vendor",data:{}})}><Plus size={14}/> Add Your First Vendor</Btn>}
         </div>
       </Card>):(<>
@@ -6159,27 +6179,26 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
                   <Pie data={[
                     {name:"Critical",value:stats.critical,fill:C.red},
                     {name:"High",value:stats.high,fill:C.orange},
-                    {name:"Medium",value:stats.medium,fill:C.yellow},
+                    {name:"Moderate",value:stats.medium,fill:C.yellow},
                     {name:"Low",value:stats.low,fill:C.green},
-                    {name:"Not Assessed",value:stats.total-stats.assessed,fill:C.textDim},
+                    {name:"Not Scanned",value:stats.total-stats.scanned,fill:C.textDim},
                   ].filter(d=>d.value>0)} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
                     {[C.red,C.orange,C.yellow,C.green,C.textDim].map((c,i)=><Cell key={i} fill={c}/>)}
                   </Pie>
-                  <Tooltip/>
-                  <Legend/>
+                  <Tooltip/><Legend/>
                 </PieChart>
               </ResponsiveContainer>
             </div>
           </Card>
           <Card title="Vendors Needing Attention">
             <div style={{maxHeight:200,overflowY:"auto"}}>
-              {vendors.filter(v=>{const r=calcRiskScore(v);return r.rating==="Critical Risk"||r.rating==="High Risk"||(r.answeredCount===0&&!v.scan_report);}).length===0?
-                <div style={{textAlign:"center",padding:20,color:C.textMuted,fontSize:13}}>{"\u2705"} All vendors look good!</div>:
-                vendors.filter(v=>{const r=calcRiskScore(v);return r.rating==="Critical Risk"||r.rating==="High Risk"||(r.answeredCount===0&&!v.scan_report);}).map(v=>{
-                  const r=calcRiskScore(v);
-                  return(<div key={v.id} onClick={()=>{setSelVendorId(v.id);setTab("assess");}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",borderRadius:8,cursor:"pointer",background:C.bg,marginBottom:4,border:`1px solid ${C.border}`}}>
-                    <div><div style={{fontSize:13,fontWeight:600,color:C.text}}>{v.name}</div><div style={{fontSize:11,color:C.textDim}}>{r.answeredCount===0&&!v.scan_report?"Not scanned yet":r.rating}</div></div>
-                    <Badge color={r.color}>{r.answeredCount===0&&!v.scan_report?"Pending":r.pct+"%"}</Badge>
+              {vendors.filter(v=>{const r=getVendorRisk(v);return r.rating==="Critical Risk"||r.rating==="High Risk"||!r.scanned;}).length===0?
+                <div style={{textAlign:"center",padding:20,color:C.textMuted,fontSize:13}}>All vendors look good!</div>:
+                vendors.filter(v=>{const r=getVendorRisk(v);return r.rating==="Critical Risk"||r.rating==="High Risk"||!r.scanned;}).map(v=>{
+                  const r=getVendorRisk(v);
+                  return(<div key={v.id} onClick={()=>{setSelVendorId(v.id);setTab(r.scanned?"report":"scan");}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",borderRadius:8,cursor:"pointer",background:C.bg,marginBottom:4,border:`1px solid ${C.border}`}}>
+                    <div><div style={{fontSize:13,fontWeight:600,color:C.text}}>{v.name}</div><div style={{fontSize:11,color:C.textDim}}>{!r.scanned?"Not scanned yet":r.rating}</div></div>
+                    <Badge color={r.color}>{!r.scanned?"Pending":r.pct+"%"}</Badge>
                   </div>);
                 })
               }
@@ -6187,25 +6206,25 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
           </Card>
         </div>
 
-        {/* All vendors quick list */}
+        {/* All vendors table */}
         <Card title="All Vendors">
           <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{background:C.bg}}>
-            {["Vendor","Category","Criticality","Data Access","Risk Score","Status",""].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"left",color:C.textMuted,fontWeight:700,fontSize:11,textTransform:"uppercase",borderBottom:`1px solid ${C.border}`}}>{h}</th>)}
+            {["Vendor","Website","Criticality","Scan Score","Risk Level","Grade",""].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"left",color:C.textMuted,fontWeight:700,fontSize:11,textTransform:"uppercase",borderBottom:`1px solid ${C.border}`}}>{h}</th>)}
           </tr></thead><tbody>
             {vendors.map(v=>{
-              const r=calcRiskScore(v);
-              return(<tr key={v.id} style={{borderBottom:`1px solid ${C.border}22`,cursor:"pointer"}} onClick={()=>{setSelVendorId(v.id);setTab("assess");}}>
-                <td style={{padding:"10px 12px"}}><div style={{fontWeight:600,color:C.text}}>{v.name}</div>{v.service_description&&<div style={{fontSize:11,color:C.textDim}}>{v.service_description.substring(0,40)}</div>}</td>
-                <td style={{padding:"10px 12px",color:C.textMuted,fontSize:12}}>{v.category}</td>
+              const r=getVendorRisk(v);
+              return(<tr key={v.id} style={{borderBottom:`1px solid ${C.border}22`,cursor:"pointer"}} onClick={()=>{setSelVendorId(v.id);setTab(r.scanned?"report":"scan");}}>
+                <td style={{padding:"10px 12px"}}><div style={{fontWeight:600,color:C.text}}>{v.name}</div><div style={{fontSize:11,color:C.textDim}}>{v.category}</div></td>
+                <td style={{padding:"10px 12px",fontSize:12,color:C.textMuted}}>{v.website||"—"}</td>
                 <td style={{padding:"10px 12px"}}><Badge color={critColor(v.criticality)}>{v.criticality}</Badge></td>
-                <td style={{padding:"10px 12px",fontSize:11,color:C.textMuted}}>{(v.data_types||[]).slice(0,2).join(", ")}{(v.data_types||[]).length>2?` +${(v.data_types||[]).length-2}`:""}</td>
                 <td style={{padding:"10px 12px"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <div style={{width:50,height:6,background:C.bg,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${r.pct}%`,background:r.color,borderRadius:3}}/></div>
-                    <span style={{fontSize:12,fontWeight:700,color:r.color}}>{r.answeredCount>0?r.pct+"%":"—"}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:r.color}}>{r.scanned?r.pct+"%":"—"}</span>
                   </div>
                 </td>
                 <td style={{padding:"10px 12px"}}><Badge color={r.color}>{r.rating}</Badge></td>
+                <td style={{padding:"10px 12px",fontWeight:800,color:r.color,fontSize:16}}>{r.grade||"—"}</td>
                 <td style={{padding:"10px 12px"}}><ChevronRight size={14} color={C.textDim}/></td>
               </tr>);
             })}
@@ -6222,27 +6241,24 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:14}}>
         {filtered.map(v=>{
-          const r=calcRiskScore(v);
+          const r=getVendorRisk(v);
           const docsReceived=COMPLIANCE_DOCS.filter(d=>(v.docs||{})[d.id]?.status==="received").length;
-          const contractExpiring=v.contract_end&&new Date(v.contract_end)<new Date(Date.now()+30*86400000);
-          return(<div key={v.id} style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,padding:18,cursor:"pointer",transition:"border-color 0.2s"}} onClick={()=>{setSelVendorId(v.id);setTab("assess");}} onMouseEnter={e=>e.currentTarget.style.borderColor=C.orange} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+          return(<div key={v.id} style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,padding:18,cursor:"pointer",transition:"border-color 0.2s"}} onClick={()=>{setSelVendorId(v.id);setTab(r.scanned?"report":"scan");}} onMouseEnter={e=>e.currentTarget.style.borderColor=C.orange} onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
               <div>
                 <h3 style={{margin:0,fontSize:15,fontWeight:700,color:C.text}}>{v.name}</h3>
-                <div style={{fontSize:11,color:C.textDim,marginTop:2}}>{v.category} • {v.service_description||"No description"}</div>
+                <div style={{fontSize:11,color:C.textDim,marginTop:2}}>{v.category} {v.website?`• ${v.website}`:""}</div>
               </div>
               <Badge color={critColor(v.criticality)}>{v.criticality}</Badge>
             </div>
-            {/* Risk bar */}
             <div style={{marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.textMuted,marginBottom:4}}><span>Risk Score</span><span style={{fontWeight:700,color:r.color}}>{r.answeredCount>0?r.pct+"%":"Not assessed"}</span></div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.textMuted,marginBottom:4}}><span>Scan Score</span><span style={{fontWeight:700,color:r.color}}>{r.scanned?`${r.pct}% (${r.grade})`:"Not scanned"}</span></div>
               <div style={{height:6,background:C.bg,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${r.pct}%`,background:r.color,borderRadius:3,transition:"width 0.3s"}}/></div>
             </div>
             <div style={{display:"flex",gap:10,fontSize:11,color:C.textMuted,flexWrap:"wrap"}}>
-              <span>{v.scan_report?"\uD83D\uDD0D Scanned":`\uD83D\uDCCB ${r.answeredCount}/${VENDOR_QUESTIONS.length} assessed`}</span>
+              {r.scanned&&<span>🛡️ {r.findings?.total||0} findings</span>}
               <span>📎 {docsReceived}/{COMPLIANCE_DOCS.length} docs</span>
-              {contractExpiring&&<span style={{color:C.red}}>⚠ Contract expiring</span>}
-              {v.contract_end&&<span>🗓 Ends {fmtDate(v.contract_end)}</span>}
+              {v.scanned_at&&<span>Scanned {fmtDate(v.scanned_at)}</span>}
             </div>
             {isAdmin&&<div style={{display:"flex",gap:4,marginTop:10,justifyContent:"flex-end"}} onClick={e=>e.stopPropagation()}>
               <button onClick={()=>setModal({type:"vendor",data:{...v}})} style={{background:"none",border:"none",cursor:"pointer",color:C.orange,padding:4}}><Edit3 size={14}/></button>
@@ -6253,208 +6269,160 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
       </div>
     </>)}
 
-    {/* ===== ASSESSMENT TAB (ATTACK SURFACE SCAN) ===== */}
-    {tab==="assess"&&selVendor&&(<div>
+    {/* ===== SCAN TAB ===== */}
+    {tab==="scan"&&selVendor&&(<div>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,flexWrap:"wrap"}}>
         <button onClick={()=>{setSelVendorId(null);setTab("dashboard");}} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",cursor:"pointer",color:C.text,display:"flex",alignItems:"center",gap:4,fontFamily:"inherit",fontSize:13}}><ArrowLeft size={14}/> Back</button>
         <div style={{flex:1}}>
           <h3 style={{margin:0,fontSize:18,fontWeight:800,color:C.text}}>{selVendor.name}</h3>
-          <span style={{fontSize:12,color:C.textMuted}}>{selVendor.category} • {selVendor.criticality} criticality{selVendor.website_url?` • ${selVendor.website_url}`:""}</span>
+          <span style={{fontSize:12,color:C.textMuted}}>{selVendor.category} • {selVendor.criticality} criticality</span>
         </div>
-        {isAdmin&&<Btn size="sm" variant="secondary" onClick={()=>setModal({type:"vendor",data:{...selVendor}})}><Edit3 size={13}/> Edit</Btn>}
-        <Btn size="sm" variant="secondary" onClick={()=>setTab("detail")}><Eye size={13}/> Details & Docs</Btn>
       </div>
 
-      {/* Scan UI */}
-      {(()=>{
-        const r=calcRiskScore(selVendor);
-        const scan=selVendor.scan_report;
-        const [scanning,setScanning]=React.useState(false);
-        const [scanError,setScanError]=React.useState(null);
+      <Card>
+        <div style={{textAlign:"center",padding:30}}>
+          <div style={{width:80,height:80,borderRadius:"50%",background:`${C.blue}22`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}><Shield size={40} color={C.blue}/></div>
+          <h3 style={{margin:"0 0 8px",fontSize:20,fontWeight:800,color:C.text}}>Attack Surface Scanner</h3>
+          <p style={{color:C.textMuted,fontSize:13,margin:"0 0 8px",maxWidth:500,marginLeft:"auto",marginRight:"auto"}}>
+            Automatically scan <strong style={{color:C.text}}>{selVendor.website||"(no URL set)"}</strong> for security vulnerabilities including SSL/TLS configuration, HTTP security headers, DNS security, email authentication (SPF/DKIM/DMARC), and technology fingerprinting.
+          </p>
+          {selVendor.scanned_at&&<p style={{fontSize:11,color:C.textDim,marginBottom:16}}>Last scanned: {fmtDate(selVendor.scanned_at)}</p>}
+          {scanning===selVendor.id?
+            <div style={{padding:20}}>
+              <div style={{width:40,height:40,border:`3px solid ${C.orange}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin 1s linear infinite",margin:"0 auto 12px"}}/>
+              <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+              <p style={{color:C.orange,fontWeight:600,fontSize:14}}>{scanProgress}</p>
+              <p style={{color:C.textDim,fontSize:11}}>This may take 10-15 seconds...</p>
+            </div>:
+            <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
+              <Btn onClick={()=>runScan(selVendor.id)} disabled={!selVendor.website}><Shield size={14}/> {selVendor.scan_report?"Re-Scan":"Run Scan"}</Btn>
+              {selVendor.scan_report&&<Btn variant="secondary" onClick={()=>setTab("report")}><Eye size={14}/> View Report</Btn>}
+            </div>
+          }
+          {!selVendor.website&&<p style={{color:C.red,fontSize:12,marginTop:12}}>Please add a website URL to this vendor first (Edit vendor).</p>}
+        </div>
+      </Card>
 
-        const runScan=async()=>{
-          const url=selVendor.website_url;
-          if(!url){setToast({msg:"Add a website URL first (Edit → Website URL)",type:"error"});return;}
-          setScanning(true);setScanError(null);
-          try{
-            const resp=await fetch("/api/vendor-scan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url})});
-            if(!resp.ok)throw new Error((await resp.json()).error||"Scan failed");
-            const report=await resp.json();
-            setData(d=>({...d,vendors:d.vendors.map(v=>v.id===selVendor.id?{...v,scan_report:report,scanned_at:new Date().toISOString()}:v)}));
-            setToast({msg:`Scan complete! Score: ${report.risk_score.overall_score}/100 (${report.risk_score.risk_level})`,type:"success"});
-          }catch(e){setScanError(e.message);setToast({msg:"Scan failed: "+e.message,type:"error"});}
-          setScanning(false);
-        };
+      {/* What gets scanned */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12,marginTop:16}}>
+        {[
+          {icon:"\ud83d\udd12",title:"SSL/TLS",desc:"Certificate validity, protocol version, cipher suites, expiry"},
+          {icon:"🛡️",title:"HTTP Headers",desc:"HSTS, CSP, X-Frame-Options, security headers analysis"},
+          {icon:"\ud83c\udf10",title:"DNS Security",desc:"Nameservers, CAA records, CNAME checks, zone transfer"},
+          {icon:"\ud83d\udce7",title:"Email Security",desc:"SPF, DKIM, DMARC records and policy analysis"},
+          {icon:"\ud83d\udcbb",title:"Technology",desc:"Server fingerprinting, framework detection, version disclosure"},
+        ].map(s=><div key={s.title} style={{background:C.card,borderRadius:10,padding:16,border:`1px solid ${C.border}`}}>
+          <div style={{fontSize:24,marginBottom:6}}>{s.icon}</div>
+          <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:4}}>{s.title}</div>
+          <div style={{fontSize:11,color:C.textDim}}>{s.desc}</div>
+        </div>)}
+      </div>
+    </div>)}
 
-        const downloadReport=()=>{
-          if(!scan)return;
-          const sev_colors={critical:"#dc2626",high:"#ea580c",medium:"#d97706",low:"#2563eb",info:"#6b7280"};
-          const rs=scan.risk_score;
-          const sc_color=rs.overall_score>=80?"#22c55e":rs.overall_score>=60?"#f59e0b":rs.overall_score>=40?"#f97316":"#ef4444";
-          let fHtml="";
-          (scan.scan_results||[]).forEach(sr=>{
-            fHtml+=`<div style="background:#1e293b;border-radius:12px;padding:18px;margin-bottom:14px;">`;
-            fHtml+=`<h3 style="margin:0 0 12px;color:#e2e8f0;font-size:15px;">${sr.scanner} (${sr.findings_count} findings)</h3>`;
-            (sr.findings||[]).forEach(f=>{
-              const sc=sev_colors[f.severity]||"#6b7280";
-              fHtml+=`<div style="border-left:4px solid ${sc};background:#0f172a;border-radius:8px;padding:10px 14px;margin-bottom:8px;">
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span style="background:${sc};color:#fff;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;text-transform:uppercase;">${f.severity}</span><strong style="color:#e2e8f0;font-size:13px;">${f.title}</strong></div>
-                <p style="color:#94a3b8;font-size:12px;margin:4px 0;">${f.description||""}</p>
-                ${f.recommendation?`<p style="color:#22d3ee;font-size:12px;margin:4px 0;">Fix: ${f.recommendation}</p>`:""}
-              </div>`;
-            });
-            fHtml+=`</div>`;
-          });
-          const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attack Surface Report - ${scan.meta.domain}</title>
-            <style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:40px;}</style></head>
-            <body><div style="max-width:900px;margin:0 auto;">
-              <div style="text-align:center;padding:30px 0;border-bottom:1px solid #1e293b;">
-                <h1 style="font-size:24px;margin-bottom:8px;">Attack Surface Report</h1>
-                <div style="color:#38bdf8;font-size:18px;">${scan.meta.domain}</div>
-                <div style="width:120px;height:120px;border-radius:50%;border:6px solid ${sc_color};display:flex;flex-direction:column;align-items:center;justify-content:center;margin:20px auto;">
-                  <div style="font-size:36px;font-weight:bold;color:${sc_color};">${rs.overall_score}</div>
-                  <div style="font-size:14px;color:${sc_color};">${rs.letter_grade}</div>
+    {/* ===== REPORT TAB ===== */}
+    {tab==="report"&&selVendor&&(()=>{
+      const rpt=selVendor.scan_report;
+      if(!rpt)return(<Card><div style={{textAlign:"center",padding:30,color:C.textMuted}}>No scan report yet. <button onClick={()=>setTab("scan")} style={{color:C.orange,background:"none",border:"none",cursor:"pointer",fontWeight:700,fontFamily:"inherit",textDecoration:"underline"}}>Run a scan</button></div></Card>);
+      const rs=rpt.risk_score;
+      const scoreColor=rs.overall_score>=80?C.green:rs.overall_score>=60?C.yellow:rs.overall_score>=40?C.orange:C.red;
+
+      return(<div>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,flexWrap:"wrap"}}>
+          <button onClick={()=>{setSelVendorId(null);setTab("dashboard");}} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",cursor:"pointer",color:C.text,display:"flex",alignItems:"center",gap:4,fontFamily:"inherit",fontSize:13}}><ArrowLeft size={14}/> Back</button>
+          <div style={{flex:1}}>
+            <h3 style={{margin:0,fontSize:18,fontWeight:800,color:C.text}}>{selVendor.name} — Scan Report</h3>
+            <span style={{fontSize:12,color:C.textMuted}}>{rpt.meta.domain} • Scanned {fmtDate(selVendor.scanned_at)} • {rpt.meta.scan_duration_seconds}s</span>
+          </div>
+          <div style={{display:"flex",gap:6}}>
+            <Btn size="sm" variant="secondary" onClick={()=>downloadHtmlReport(selVendor)}><Download size={13}/> HTML</Btn>
+            <Btn size="sm" variant="secondary" onClick={()=>downloadReport(selVendor)}><Download size={13}/> JSON</Btn>
+            <Btn size="sm" onClick={()=>runScan(selVendor.id)} disabled={scanning===selVendor.id}><RefreshCw size={13}/> Re-Scan</Btn>
+          </div>
+        </div>
+
+        {/* Score + Summary */}
+        <div style={{display:"grid",gridTemplateColumns:"200px 1fr",gap:16,marginBottom:20}}>
+          <div style={{background:C.card,borderRadius:14,padding:24,border:`2px solid ${scoreColor}44`,textAlign:"center"}}>
+            <div style={{width:100,height:100,borderRadius:"50%",border:`5px solid ${scoreColor}`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",margin:"0 auto 10px"}}>
+              <div style={{fontSize:36,fontWeight:900,color:scoreColor}}>{rs.overall_score}</div>
+              <div style={{fontSize:14,fontWeight:700,color:scoreColor}}>{rs.letter_grade}</div>
+            </div>
+            <Badge color={scoreColor}>{rs.risk_level}</Badge>
+          </div>
+          <div>
+            {/* Severity counts */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:16}}>
+              {[{l:"Critical",v:rs.findings_summary.critical,c:C.red},{l:"High",v:rs.findings_summary.high,c:C.orange},{l:"Medium",v:rs.findings_summary.medium,c:C.yellow},{l:"Low",v:rs.findings_summary.low,c:C.blue},{l:"Info",v:rs.findings_summary.info,c:C.textDim}].map(s=>
+                <div key={s.l} style={{background:C.card,borderRadius:10,padding:"10px 12px",textAlign:"center",border:`1px solid ${s.c}22`}}>
+                  <div style={{fontSize:24,fontWeight:800,color:s.c}}>{s.v}</div>
+                  <div style={{fontSize:10,color:C.textMuted,fontWeight:600}}>{s.l}</div>
                 </div>
-                <div style="font-size:16px;color:${sc_color};font-weight:600;">${rs.risk_level}</div>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:20px 0;">
-                ${["critical","high","medium","low","info"].map(s=>`<div style="background:#1e293b;padding:14px;border-radius:10px;text-align:center;"><div style="font-size:24px;font-weight:bold;color:${sev_colors[s]};">${rs.findings_summary[s]||0}</div><div style="font-size:11px;color:#94a3b8;margin-top:4px;">${s[0].toUpperCase()+s.slice(1)}</div></div>`).join("")}
-              </div>
-              <h2 style="font-size:18px;color:#94a3b8;margin:24px 0 14px;">Detailed Findings</h2>
-              ${fHtml}
-              <div style="text-align:center;color:#64748b;font-size:12px;margin-top:30px;padding-top:20px;border-top:1px solid #1e293b;">
-                <p>Scanned ${scan.meta.scan_date?.substring(0,19)} UTC | Duration: ${scan.meta.scan_duration_seconds}s</p>
-                <p>SecComply Attack Surface Scanner v1.0</p>
-              </div>
-            </div></body></html>`;
-          const blob=new Blob([html],{type:"text/html"});
-          const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`AttackSurface_${scan.meta.domain}_${new Date().toISOString().slice(0,10)}.html`;a.click();
-        };
-
-        return(<>
-          {/* Score Cards */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14,marginBottom:20}}>
-            <div style={{background:C.card,borderRadius:12,padding:18,border:`1px solid ${r.color}33`,textAlign:"center"}}>
-              <div style={{fontSize:11,color:C.textMuted,fontWeight:600,marginBottom:4}}>Security Score</div>
-              <div style={{fontSize:36,fontWeight:800,color:r.color}}>{scan?r.pct:"\u2014"}</div>
-              <Badge color={r.color}>{scan?r.rating:"Not Scanned"}</Badge>
-              {scan&&<div style={{fontSize:11,color:C.textDim,marginTop:6}}>Grade: {scan.risk_score.letter_grade}</div>}
+              )}
             </div>
-            <div style={{background:C.card,borderRadius:12,padding:18,border:`1px solid ${C.border}`,textAlign:"center"}}>
-              <div style={{fontSize:11,color:C.textMuted,fontWeight:600,marginBottom:4}}>Total Findings</div>
-              <div style={{fontSize:36,fontWeight:800,color:C.text}}>{scan?scan.risk_score.findings_summary.total:"\u2014"}</div>
-              {scan&&<div style={{display:"flex",justifyContent:"center",gap:8,marginTop:6,fontSize:11}}>
-                {scan.risk_score.findings_summary.critical>0&&<span style={{color:C.red}}>{"\u25CF"}{scan.risk_score.findings_summary.critical} Crit</span>}
-                {scan.risk_score.findings_summary.high>0&&<span style={{color:C.orange}}>{"\u25CF"}{scan.risk_score.findings_summary.high} High</span>}
-                {scan.risk_score.findings_summary.medium>0&&<span style={{color:C.yellow}}>{"\u25CF"}{scan.risk_score.findings_summary.medium} Med</span>}
-              </div>}
-            </div>
-            <div style={{background:C.card,borderRadius:12,padding:18,border:`1px solid ${C.border}`,textAlign:"center"}}>
-              <div style={{fontSize:11,color:C.textMuted,fontWeight:600,marginBottom:4}}>Scanners Run</div>
-              <div style={{fontSize:36,fontWeight:800,color:C.text}}>{scan?scan.meta.scanners_run:"\u2014"}</div>
-              {scan&&<div style={{fontSize:11,color:C.textDim,marginTop:6}}>in {scan.meta.scan_duration_seconds}s</div>}
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
-            <Btn onClick={runScan} disabled={scanning}>
-              {scanning?<><Activity size={14}/> Scanning...</>:<><RefreshCw size={14}/> {scan?"Re-scan":"Run Attack Surface Scan"}</>}
-            </Btn>
-            {scan&&<Btn variant="secondary" onClick={downloadReport}><Download size={14}/> Download Report</Btn>}
-            {!selVendor.website_url&&<span style={{fontSize:12,color:C.yellow,alignSelf:"center"}}>{"\u26A0"} Add a website URL to enable scanning</span>}
-          </div>
-          {scanError&&<div style={{padding:"10px 14px",background:C.redBg,border:`1px solid ${C.red}44`,borderRadius:8,color:C.red,fontSize:12,marginBottom:16}}>{scanError}</div>}
-
-          {/* Category Breakdown */}
-          {scan&&<Card title="Category Breakdown" style={{marginBottom:16}}>
-            <div style={{display:"grid",gap:10}}>
-              {Object.entries(scan.risk_score.category_scores||{}).map(([cat,score])=>{
-                const col=score>=80?C.green:score>=60?C.yellow:score>=40?C.orange:C.red;
-                return(<div key={cat} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 0"}}>
-                  <div style={{width:130,fontSize:12,fontWeight:600,color:C.text}}>{cat}</div>
-                  <div style={{flex:1,height:8,background:C.bg,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${score}%`,background:col,borderRadius:4,transition:"width 0.3s"}}/></div>
-                  <div style={{width:50,textAlign:"right",fontSize:13,fontWeight:700,color:col}}>{score}%</div>
-                </div>);
-              })}
-            </div>
-          </Card>}
-
-          {/* Top Risks */}
-          {scan&&scan.risk_score.top_risks?.length>0&&<Card title="Top Risks & Recommendations" style={{marginBottom:16}}>
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {scan.risk_score.top_risks.map((risk,i)=>{
-                const sevC={critical:C.red,high:C.orange,medium:C.yellow,low:C.blue};
-                const col=sevC[risk.severity]||C.textDim;
-                return(<div key={i} style={{padding:"12px 16px",background:C.bg,borderRadius:8,borderLeft:`4px solid ${col}`}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                    <span style={{background:`${col}22`,color:col,padding:"2px 10px",borderRadius:12,fontSize:10,fontWeight:700,textTransform:"uppercase"}}>{risk.severity}</span>
-                    <span style={{fontSize:13,fontWeight:600,color:C.text}}>{risk.title}</span>
-                    <span style={{fontSize:10,color:C.textDim,marginLeft:"auto"}}>{risk.category}</span>
+            {/* Category scores */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:8}}>
+              {Object.entries(rs.category_scores||{}).map(([cat,score])=>{
+                const catColor=score>=80?C.green:score>=60?C.yellow:score>=40?C.orange:C.red;
+                return(<div key={cat} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:C.card,borderRadius:8}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:11,color:C.textMuted,fontWeight:600,marginBottom:2}}>{cat}</div>
+                    <div style={{height:5,background:C.bg,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${score}%`,background:catColor,borderRadius:3}}/></div>
                   </div>
-                  {risk.recommendation&&<div style={{fontSize:12,color:C.textMuted,marginTop:4}}>{"\uD83D\uDCA1"} {risk.recommendation}</div>}
+                  <span style={{fontSize:13,fontWeight:700,color:catColor}}>{score}%</span>
                 </div>);
               })}
             </div>
-          </Card>}
+          </div>
+        </div>
 
-          {/* Detailed Findings */}
-          {scan&&<Card title="Detailed Scanner Findings">
-            {(scan.scan_results||[]).map((sr,si)=>(
-              <div key={si} style={{marginBottom:16}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${C.border}`,marginBottom:8}}>
-                  <h4 style={{margin:0,fontSize:14,fontWeight:700,color:C.orange}}>{sr.scanner}</h4>
-                  <Badge color={C.blue}>{sr.findings_count} findings</Badge>
+        {/* Top Risks */}
+        {rs.top_risks?.length>0&&<Card title="Top Risks" style={{marginBottom:16}}>
+          {rs.top_risks.map((risk,i)=>(
+            <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"10px 12px",background:C.bg,borderRadius:8,marginBottom:6,borderLeft:`3px solid ${sevColors[risk.severity]||C.textDim}`}}>
+              <Badge color={sevColors[risk.severity]}>{risk.severity}</Badge>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.text}}>{risk.title}</div>
+                {risk.recommendation&&<div style={{fontSize:11,color:C.textDim,marginTop:2}}>Fix: {risk.recommendation}</div>}
+              </div>
+              <span style={{fontSize:10,color:C.textDim,whiteSpace:"nowrap"}}>{risk.category}</span>
+            </div>
+          ))}
+        </Card>}
+
+        {/* Detailed Findings by Scanner */}
+        {(rpt.scan_results||[]).map((sr,si)=>(
+          <Card key={si} title={`${sr.scanner} (${sr.findings_count} findings)`} style={{marginBottom:12}}>
+            {(sr.findings||[]).map((f,fi)=>(
+              <div key={fi} style={{padding:"10px 14px",background:C.bg,borderRadius:8,marginBottom:6,borderLeft:`3px solid ${sevColors[f.severity]||C.textDim}`}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <Badge color={sevColors[f.severity]}>{f.severity}</Badge>
+                  <span style={{fontSize:13,fontWeight:600,color:C.text}}>{f.title}</span>
                 </div>
-                {(sr.findings||[]).map((f,fi)=>{
-                  const sevC2={critical:C.red,high:C.orange,medium:C.yellow,low:C.blue,info:C.textDim};
-                  const col2=sevC2[f.severity]||C.textDim;
-                  return(<div key={fi} style={{padding:"10px 14px",background:C.bg,borderRadius:8,marginBottom:6,borderLeft:`3px solid ${col2}`}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <span style={{background:`${col2}22`,color:col2,padding:"1px 8px",borderRadius:10,fontSize:10,fontWeight:700,textTransform:"uppercase"}}>{f.severity}</span>
-                      <span style={{fontSize:12,fontWeight:600,color:C.text}}>{f.title}</span>
-                    </div>
-                    {f.description&&<div style={{fontSize:11,color:C.textMuted,marginTop:4}}>{f.description}</div>}
-                    {f.recommendation&&<div style={{fontSize:11,color:"#22d3ee",marginTop:3}}>{"\u2192"} {f.recommendation}</div>}
-                  </div>);
-                })}
+                <p style={{fontSize:12,color:C.textMuted,margin:"2px 0"}}>{f.description}</p>
+                {f.evidence&&<div style={{fontSize:11,color:C.textDim,fontFamily:"monospace",background:C.card,padding:"4px 8px",borderRadius:4,marginTop:4}}>Evidence: {f.evidence}</div>}
+                {f.recommendation&&<div style={{fontSize:11,color:"#22d3ee",marginTop:4}}>→ {f.recommendation}</div>}
               </div>
             ))}
-          </Card>}
-
-          {/* Empty state */}
-          {!scan&&!scanning&&<Card>
-            <div style={{textAlign:"center",padding:40}}>
-              <div style={{width:64,height:64,borderRadius:"50%",background:`${C.orange}22`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Shield size={32} color={C.orange}/></div>
-              <h3 style={{color:C.text,margin:"0 0 8px",fontSize:18,fontWeight:800}}>Attack Surface Scan</h3>
-              <p style={{color:C.textMuted,fontSize:13,margin:"0 0 6px",maxWidth:500,marginLeft:"auto",marginRight:"auto"}}>Automatically scan this vendor's website for SSL/TLS, HTTP headers, DNS, email auth (SPF/DKIM/DMARC), and open ports.</p>
-              {selVendor.website_url?
-                <p style={{color:C.textDim,fontSize:12,margin:"0 0 20px"}}>Target: <strong style={{color:C.blue}}>{selVendor.website_url}</strong></p>:
-                <p style={{color:C.yellow,fontSize:12,margin:"0 0 20px"}}>{"\u26A0"} Add a website URL first (click Edit above)</p>}
-              {selVendor.website_url&&<Btn onClick={runScan}><RefreshCw size={14}/> Run Scan Now</Btn>}
-            </div>
-          </Card>}
-        </>);
-      })()}
-    </div>)}
+          </Card>
+        ))}
+      </div>);
+    })()}
 
     {/* ===== DETAIL TAB (Docs + Info) ===== */}
     {tab==="detail"&&selVendor&&(<div>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-        <button onClick={()=>setTab("assess")} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",cursor:"pointer",color:C.text,display:"flex",alignItems:"center",gap:4,fontFamily:"inherit",fontSize:13}}><ArrowLeft size={14}/> Back to Assessment</button>
+        <button onClick={()=>setTab("report")} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",cursor:"pointer",color:C.text,display:"flex",alignItems:"center",gap:4,fontFamily:"inherit",fontSize:13}}><ArrowLeft size={14}/> Back</button>
         <h3 style={{margin:0,fontSize:18,fontWeight:800,color:C.text}}>{selVendor.name} — Details & Documents</h3>
       </div>
 
-      {/* Vendor Info */}
       <Card title="Vendor Information" style={{marginBottom:16}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14}}>
           {[
             {l:"Category",v:selVendor.category},{l:"Criticality",v:selVendor.criticality},
-            {l:"Service",v:selVendor.service_description||"—"},
+            {l:"Website",v:selVendor.website||"—"},{l:"Service",v:selVendor.service_description||"—"},
             {l:"Data Types",v:(selVendor.data_types||[]).join(", ")||"—"},
             {l:"Contact",v:selVendor.contact_name||"—"},{l:"Email",v:selVendor.contact_email||"—"},
             {l:"Contract Start",v:fmtDate(selVendor.contract_start)},{l:"Contract End",v:fmtDate(selVendor.contract_end)},
-            {l:"Last Assessed",v:fmtDate(selVendor.assessed_at)},
           ].map(item=>(
             <div key={item.l} style={{padding:10,background:C.bg,borderRadius:8}}>
               <div style={{fontSize:10,color:C.textDim,fontWeight:700,textTransform:"uppercase",marginBottom:2}}>{item.l}</div>
@@ -6464,7 +6432,6 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
         </div>
       </Card>
 
-      {/* Compliance Documents */}
       <Card title="Compliance Documents">
         <p style={{fontSize:12,color:C.textDim,margin:"-4px 0 16px"}}>Track required compliance documents from this vendor.</p>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -6478,7 +6445,6 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
               <div style={{flex:1}}>
                 <div style={{fontSize:13,fontWeight:600,color:C.text}}>{doc.name}</div>
                 {ds.expiry_date&&<div style={{fontSize:11,color:new Date(ds.expiry_date)<new Date()?C.red:C.textDim}}>Expires: {fmtDate(ds.expiry_date)}{new Date(ds.expiry_date)<new Date()?" (EXPIRED)":""}</div>}
-                {ds.notes&&<div style={{fontSize:11,color:C.textDim,marginTop:2}}>{ds.notes}</div>}
               </div>
               {isAdmin?<div style={{display:"flex",gap:6,alignItems:"center"}}>
                 <select value={status} onChange={e=>setDocStatus(selVendor.id,doc.id,{status:e.target.value})} style={{padding:"5px 8px",background:`${statusColors2[status]}22`,border:`1px solid ${statusColors2[status]}44`,borderRadius:6,color:statusColors2[status],fontSize:11,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>
@@ -6492,7 +6458,6 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
         </div>
       </Card>
 
-      {/* Notes */}
       {selVendor.notes&&<Card title="Notes" style={{marginTop:16}}>
         <p style={{fontSize:13,color:C.textMuted,lineHeight:1.6,margin:0,whiteSpace:"pre-wrap"}}>{selVendor.notes}</p>
       </Card>}
