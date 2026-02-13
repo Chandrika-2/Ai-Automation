@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SecComply ISMS</title>
+    <!-- [SEC-14] Enhanced Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self' 'unsafe-inline';
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      font-src 'self' https://fonts.gstatic.com;
+      img-src 'self' data: blob: https://*.supabase.co;
+      connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.github.com;
+      frame-src https://view.officeapps.live.com https://docs.google.com;
+      frame-ancestors 'none';
+      object-src 'none';
+      base-uri 'self';
+      form-action 'self';
+      upgrade-insecure-requests;
+    " />
+    <!-- [SEC-14] Security headers -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="X-Frame-Options" content="DENY" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <!-- [SEC-15] Permissions Policy — disable unnecessary browser APIs -->
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>" />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { background: #0B1120; }
+      @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      /* [SEC-16] Print protection — shows watermark and blocks sensitive content */
+      @media print {
+        body::before {
+          content: "⚠️ CONFIDENTIAL — SecComply ISMS — Unauthorized printing prohibited";
+          display: block; text-align: center; padding: 20px;
+          font-size: 14px; color: #F97316; font-weight: bold;
+          border-bottom: 2px solid #F97316;
+        }
+        body::after {
+          content: "This document contains sensitive compliance data. Handle according to your organization's information classification policy.";
+          display: block; text-align: center; padding: 10px;
+          font-size: 10px; color: #94A3B8; margin-top: 20px;
+        }
+      }
+      /* [SEC-17] Prevent text selection on sensitive badges (defense in depth) */
+      .no-select { user-select: none; -webkit-user-select: none; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./src/main.jsx"></script>
+    <script>
+      // [SEC-18] Disable right-click context menu on production (optional — can be removed)
+      if (window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1')) {
+        document.addEventListener('contextmenu', function(e) {
+          // Allow right-click on inputs/textareas for usability
+          if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+          // On other elements, show a warning instead of full context menu
+        });
+      }
+      // [SEC-19] Console warning for social engineering protection
+      console.log(
+        '%c⚠️ SECURITY WARNING',
+        'color: #EF4444; font-size: 18px; font-weight: bold;'
+      );
+      console.log(
+        '%cDo NOT paste anything here that someone told you to paste. This is a browser feature intended for developers. If someone told you to copy-paste something here to "fix" or "hack" something, it is a scam.',
+        'color: #F97316; font-size: 14px;'
+      );
+    </script>
+  </body>
+</html>

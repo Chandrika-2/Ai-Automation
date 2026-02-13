@@ -1,0 +1,42 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Redirect /api/* to Netlify Functions
+[[redirects]]
+  from = "/api/test"
+  to = "/.netlify/functions/aws-test"
+  status = 200
+
+[[redirects]]
+  from = "/api/scan"
+  to = "/.netlify/functions/aws-scan"
+  status = 200
+
+[[redirects]]
+  from = "/api/azure/test"
+  to = "/.netlify/functions/azure-test"
+  status = 200
+
+[[redirects]]
+  from = "/api/azure/scan"
+  to = "/.netlify/functions/azure-scan"
+  status = 200
+
+[[redirects]]
+  from = "/api/create-employee"
+  to = "/.netlify/functions/create-employee"
+  status = 200
+
+# SPA fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
