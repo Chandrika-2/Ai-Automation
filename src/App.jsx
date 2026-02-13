@@ -279,12 +279,20 @@ const SUPER_ADMIN_EMAIL = (import.meta.env.VITE_SUPER_ADMIN_EMAIL || "").toLower
 
 // Generate secure password using crypto API [PATCH V4]
 const genPassword = () => {
-  const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%&*";
-  const array = new Uint32Array(14);
+  const lower = "abcdefghjkmnpqrstuvwxyz";
+  const upper = "ABCDEFGHJKMNPQRSTUVWXYZ";
+  const nums = "23456789";
+  const special = "!@#$%&*";
+  const all = lower + upper + nums + special;
+  const pick = (s) => s[crypto.getRandomValues(new Uint32Array(1))[0] % s.length];
+  // Guarantee at least one of each required type
+  let pw = [pick(lower), pick(upper), pick(nums), pick(special)];
+  const array = new Uint32Array(10);
   crypto.getRandomValues(array);
-  let pw = "";
-  for (let i = 0; i < 14; i++) pw += chars[array[i] % chars.length];
-  return pw;
+  for (let i = 0; i < 10; i++) pw.push(all[array[i] % all.length]);
+  // Shuffle
+  for (let i = pw.length - 1; i > 0; i--) { const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1); [pw[i], pw[j]] = [pw[j], pw[i]]; }
+  return pw.join("");
 };
 
 // Secure ID generation [PATCH V11]
@@ -483,6 +491,7 @@ const createAuthUser = async(token, email, password, name, role, orgId) => {
 };
 
 // Create employee via Netlify function (Admin API) — NO email invite sent
+// Falls back to regular signup if Netlify function is unavailable
 const createEmployeeNoEmail = async(token, email, password, name, role, orgId) => {
   const pwCheck = validatePasswordComplexity(password);
   if (!pwCheck.valid) throw new Error("Password requirements:\n• " + pwCheck.errors.join("\n• "));
@@ -490,24 +499,33 @@ const createEmployeeNoEmail = async(token, email, password, name, role, orgId) =
 
   const cleanEmail = email.toLowerCase().trim();
 
-  // Call Netlify function which uses Supabase Admin API (no invite email)
-  const res = await safeFetch("/api/create-employee", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: cleanEmail, password, name: name.trim(), role, orgId, callerToken: token }),
-  });
+  try {
+    // Try Netlify function first (Admin API — no invite email)
+    const res = await safeFetch("/api/create-employee", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: cleanEmail, password, name: name.trim(), role, orgId, callerToken: token }),
+    });
 
-  const d = await res.json().catch(()=>({}));
-  if (!res.ok) {
-    throw new Error(d.error || `Account creation failed (HTTP ${res.status})`);
+    const d = await res.json().catch(()=>({}));
+    if (!res.ok) {
+      // If server config error, fall back to regular signup
+      if (d.error && d.error.includes("Server configuration")) throw new Error("FALLBACK");
+      throw new Error(d.error || `Account creation failed (HTTP ${res.status})`);
+    }
+
+    const userId = d.id;
+    if (!userId) throw new Error("Account created but no user ID returned.");
+
+    await auditLog(token, "create_user", { resource_type: "user", resource_id: userId, org_id: orgId, email: cleanEmail, role }, "critical");
+    return { id: userId, email: cleanEmail };
+  } catch(e) {
+    if (e.message === "FALLBACK" || e.message.includes("Failed to fetch") || e.message.includes("404")) {
+      // Fallback: use regular signup endpoint
+      return await createAuthUser(token, cleanEmail, password, name.trim(), role, orgId);
+    }
+    throw e;
   }
-
-  const userId = d.id;
-  if (!userId) throw new Error("Account created but no user ID returned.");
-
-  await auditLog(token, "create_user", { resource_type: "user", resource_id: userId, org_id: orgId, email: cleanEmail, role }, "critical");
-
-  return { id: userId, email: cleanEmail };
 };
 
 const loadRbac = async(token) => {
