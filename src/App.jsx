@@ -5954,6 +5954,8 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
   const [modal,setModal]=useState(null); // {type:"vendor"|"doc", data:{...}}
   const [toast,setToast]=useState(null);
   const [search,setSearch]=useState("");
+  const [scanning,setScanning]=useState(false);
+  const [scanError,setScanError]=useState(null);
   const {token,user,orgId}=useAuth();
   const isAdmin=["super_admin","employee","client_admin"].includes(userRole);
   const vendors=data.vendors||[];
@@ -6269,8 +6271,6 @@ const VendorRiskModule = ({data,setData,role:userRole}) => {
       {(()=>{
         const r=calcRiskScore(selVendor);
         const scan=selVendor.scan_report;
-        const [scanning,setScanning]=React.useState(false);
-        const [scanError,setScanError]=React.useState(null);
 
         const runScan=async()=>{
           const url=selVendor.website_url;
