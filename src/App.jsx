@@ -740,7 +740,7 @@ const AuthPage = ({onAuth}) => {
     <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif"}}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
       <div style={{width:400,maxWidth:"95vw"}}>
-        <div style={{textAlign:"center",marginBottom:32}}><Logo/><p style={{color:C.textMuted,fontSize:14,marginTop:8}}>AI Powered Compliance Platform</p></div>
+        <div style={{textAlign:"center",marginBottom:32,display:"flex",flexDirection:"column",alignItems:"center"}}><Logo/><p style={{color:C.textMuted,fontSize:14,marginTop:8}}>AI Powered Compliance Platform</p></div>
         <div style={{background:C.sidebar,borderRadius:16,border:`1px solid ${C.border}`,padding:32}}>
           <h3 style={{margin:"0 0 24px",textAlign:"center",color:C.text,fontSize:18,fontWeight:800}}>Sign In</h3>
           {!ENV_READY&&<div style={{padding:"12px 14px",background:"#422006",border:"1px solid #F9731644",borderRadius:8,color:"#F97316",fontSize:12,marginBottom:16,fontWeight:500,lineHeight:1.6}}>
@@ -5429,7 +5429,7 @@ const SetupWizard = ({user,token,onComplete}) => {
     <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif"}}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
       <div style={{width:480,maxWidth:"95vw"}}>
-        <div style={{textAlign:"center",marginBottom:32}}><Logo/><p style={{color:C.textMuted,fontSize:14,marginTop:8}}>First-Time Platform Setup</p></div>
+        <div style={{textAlign:"center",marginBottom:32,display:"flex",flexDirection:"column",alignItems:"center"}}><Logo/><p style={{color:C.textMuted,fontSize:14,marginTop:8}}>First-Time Platform Setup</p></div>
         <Card>
           {allowed?<>
             <div style={{textAlign:"center",marginBottom:24}}>
@@ -6606,7 +6606,7 @@ const ForcePasswordChange = ({ user, token, onComplete, onLogout }) => {
     <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif"}}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
       <div style={{width:440,maxWidth:"95vw"}}>
-        <div style={{textAlign:"center",marginBottom:24}}><Logo/></div>
+        <div style={{textAlign:"center",marginBottom:24,display:"flex",justifyContent:"center"}}><Logo/></div>
         <div style={{background:C.sidebar,borderRadius:16,border:`1px solid ${C.border}`,padding:32}}>
           <div style={{textAlign:"center",marginBottom:20}}>
             <div style={{width:48,height:48,borderRadius:"50%",background:`${C.orange}22`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><Lock size={24} color={C.orange}/></div>
