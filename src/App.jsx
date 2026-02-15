@@ -6698,6 +6698,83 @@ export default function App() {
   // [SEC-9] Force password change state
   const [mustChangePassword, setMustChangePassword] = useState(false);
 
+  // Session restore flag
+  const sessionRestoreAttempted = useRef(false);
+
+  // ─── Session Persistence Helpers ───
+  const SESSION_KEY = "sc_session";
+  const persistSession = (tok, usr, refreshTok) => {
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+        token: tok,
+        user: usr,
+        refreshToken: refreshTok || null,
+        timestamp: Date.now(),
+      }));
+    } catch (e) { console.warn("Session persist failed:", e.message); }
+  };
+  const clearPersistedSession = () => {
+    try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
+  };
+  const getPersistedSession = () => {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      const s = JSON.parse(raw);
+      // Reject sessions older than 8 hours
+      if (Date.now() - s.timestamp > SESSION_MAX_DURATION) { clearPersistedSession(); return null; }
+      return s;
+    } catch (e) { return null; }
+  };
+
+  // ─── Restore session on mount ───
+  useEffect(() => {
+    if (sessionRestoreAttempted.current || user) return;
+    sessionRestoreAttempted.current = true;
+    const saved = getPersistedSession();
+    if (!saved || !saved.token || !saved.user) return;
+
+    // Try refreshing the token first to ensure it's still valid
+    const restoreSession = async () => {
+      setLoading(true);
+      try {
+        if (saved.refreshToken) {
+          const r = await safeFetch(`${SUPA_URL}/auth/v1/token?grant_type=refresh_token`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "apikey": SUPA_KEY },
+            body: JSON.stringify({ refresh_token: saved.refreshToken }),
+          });
+          if (r.ok) {
+            const d = await r.json();
+            if (d.access_token && d.user) {
+              handleAuth(d.access_token, d.user, d.refresh_token);
+              return;
+            }
+          }
+        }
+        // If refresh fails, try using existing token (might still be valid)
+        const verifyR = await safeFetch(`${SUPA_URL}/auth/v1/user`, {
+          headers: { "apikey": SUPA_KEY, "Authorization": `Bearer ${saved.token}` },
+        });
+        if (verifyR.ok) {
+          const userData = await verifyR.json();
+          if (userData?.id) {
+            handleAuth(saved.token, userData, saved.refreshToken);
+            return;
+          }
+        }
+        // Token invalid — clear and show login
+        clearPersistedSession();
+        setLoading(false);
+      } catch (e) {
+        console.warn("Session restore failed:", e.message);
+        clearPersistedSession();
+        setLoading(false);
+      }
+    };
+    restoreSession();
+  }, []);
+
   // [PATCH V7] Token refresh mechanism
   const tokenRefreshRef = useRef(null);
   useEffect(() => {
@@ -6721,6 +6798,7 @@ export default function App() {
           if (d.access_token) {
             setToken(d.access_token);
             tokenRefreshRef.current = d.refresh_token;
+            persistSession(d.access_token, user, d.refresh_token);
           }
         }
       } catch (e) { console.warn("Token refresh failed:", e.message); }
@@ -6738,6 +6816,7 @@ export default function App() {
   const handleIdleTimeout = useCallback(() => {
     if (user && token) {
       auditLog(token, "session_timeout", { resource_type: "session" }, "warning");
+      clearPersistedSession();
       handleLogout();
     }
   }, [user, token]);
@@ -6759,6 +6838,7 @@ export default function App() {
     const check = setInterval(() => {
       if (Date.now() - sessionStartTime.current > SESSION_MAX_DURATION) {
         auditLog(token, "session_max_duration", { resource_type: "session" }, "warning");
+        clearPersistedSession();
         handleLogout();
       }
     }, 60000);
@@ -6875,6 +6955,7 @@ export default function App() {
     setToken(tok); setUser(usr); setLoading(true);
     sessionStartTime.current = Date.now(); // [SEC-5] Track session start
     if (refreshTok) tokenRefreshRef.current = refreshTok;
+    persistSession(tok, usr, refreshTok || tokenRefreshRef.current);
     const userEmail = (usr.email||"").toLowerCase().trim();
 
     // [SEC-2] Audit log: login event
@@ -7033,6 +7114,8 @@ export default function App() {
     if (token) await auditLog(token, "logout", { resource_type: "session" }, "info");
     // [SEC-7] Server-side session invalidation
     if (token) await serverLogout(token);
+    // Clear persisted session
+    clearPersistedSession();
     // Clear all sensitive state
     setUser(null); setToken(null); setData(null); setRbac(null);
     setCurrentOrg(null); setCurrentRole(null); setPage("dashboard");
@@ -7042,6 +7125,13 @@ export default function App() {
   };
 
   // ─── Pre-auth screens ───
+  // Show loading during session restore attempt
+  if(!user && !sessionRestoreAttempted.current && getPersistedSession()) return (
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif"}}>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+      <div style={{textAlign:"center"}}><Loader size={32} color={C.orange} style={{animation:"spin 1s linear infinite",marginBottom:16}}/><div style={{color:C.textMuted,fontSize:14}}>Restoring session...</div><style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style></div>
+    </div>
+  );
   if(!user) return <AuthPage onAuth={handleAuth}/>;
   // [SEC-9] Force password change — must complete before any access
   if(mustChangePassword) return <ForcePasswordChange user={user} token={token} onComplete={()=>{setMustChangePassword(false);handleAuth(token,user,tokenRefreshRef.current);}} onLogout={handleLogout}/>;
