@@ -6682,7 +6682,10 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [data, setData] = useState(null);
-  const [page, setPage] = useState("dashboard");
+  const [page, setPageRaw] = useState(() => {
+    try { return sessionStorage.getItem("sc_page") || "dashboard"; } catch { return "dashboard"; }
+  });
+  const setPage = (p) => { setPageRaw(p); try { sessionStorage.setItem("sc_page", p); } catch {} };
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
@@ -7116,6 +7119,7 @@ export default function App() {
     if (token) await serverLogout(token);
     // Clear persisted session
     clearPersistedSession();
+    try { sessionStorage.removeItem("sc_page"); } catch {}
     // Clear all sensitive state
     setUser(null); setToken(null); setData(null); setRbac(null);
     setCurrentOrg(null); setCurrentRole(null); setPage("dashboard");
