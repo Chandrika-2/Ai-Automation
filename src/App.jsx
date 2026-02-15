@@ -7046,16 +7046,22 @@ export default function App() {
       if(isSecComply(me.role)) {
         // Super Admin / Employee → Admin dashboard (select client mode)
         setAppMode("select_client"); setData(null); setLoading(false);
-        setPage("admin");
+        const savedPage = sessionStorage.getItem("sc_page");
+        if(!savedPage) setPage("admin");
+        // Auto-restore last selected org on session restore
+        const savedOrg = sessionStorage.getItem("sc_org");
+        if(savedOrg) { setTimeout(()=>enterClient(savedOrg), 0); }
       } else {
         // Client role → load their org data
         setCurrentOrg(me.orgId);
         const saved = await loadOrgData(tok, me.orgId);
         setData(saved ? sanitizeData(saved) : getInitialData());
         setAppMode("isms");
-        if(me.role==="client_employee") setPage("training");
-        else if(me.role==="client_admin") setPage("dashboard");
-        else setPage("dashboard");
+        const savedPage2 = sessionStorage.getItem("sc_page");
+        if(!savedPage2) {
+          if(me.role==="client_employee") setPage("training");
+          else setPage("dashboard");
+        }
         setLoading(false);
         isInitialLoad.current = true;
       }
@@ -7068,17 +7074,21 @@ export default function App() {
   // Enter a specific client org (for SecComply staff)
   const enterClient = async(orgId) => {
     setLoading(true); setCurrentOrg(orgId);
+    try { sessionStorage.setItem("sc_org", orgId); } catch {}
     try {
       const saved = await loadOrgData(token, orgId);
       setData(saved ? sanitizeData(saved) : getInitialData());
     } catch(e) { setData(getInitialData()); }
-    setAppMode("isms"); setPage("dashboard");
+    setAppMode("isms");
+    const savedPage3 = sessionStorage.getItem("sc_page");
+    if(!savedPage3 || savedPage3==="admin") setPage("dashboard");
     setLoading(false); isInitialLoad.current = true;
   };
 
   // Back to client list (SecComply staff)
   const backToClients = () => {
     setCurrentOrg(null); setData(null); setAppMode("select_client"); setPage("admin");
+    try { sessionStorage.removeItem("sc_org"); } catch {}
   };
 
   // Setup complete
@@ -7120,6 +7130,7 @@ export default function App() {
     // Clear persisted session
     clearPersistedSession();
     try { sessionStorage.removeItem("sc_page"); } catch {}
+    try { sessionStorage.removeItem("sc_org"); } catch {}
     // Clear all sensitive state
     setUser(null); setToken(null); setData(null); setRbac(null);
     setCurrentOrg(null); setCurrentRole(null); setPage("dashboard");
