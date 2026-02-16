@@ -7,12 +7,12 @@
     <!-- [SEC-14] Enhanced Content Security Policy -->
     <meta http-equiv="Content-Security-Policy" content="
       default-src 'self';
-      script-src 'self' 'unsafe-inline';
-      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com;
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com;
       font-src 'self' https://fonts.gstatic.com;
-      img-src 'self' data: blob: https://*.supabase.co;
-      connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.github.com;
-      frame-src https://view.officeapps.live.com https://docs.google.com;
+      img-src 'self' data: blob: https://*.supabase.co https://*.googleusercontent.com;
+      connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.github.com https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://cloudresourcemanager.googleapis.com;
+      frame-src https://view.officeapps.live.com https://docs.google.com https://accounts.google.com;
       frame-ancestors 'none';
       object-src 'none';
       base-uri 'self';
@@ -47,6 +47,7 @@
       /* [SEC-17] Prevent text selection on sensitive badges (defense in depth) */
       .no-select { user-select: none; -webkit-user-select: none; }
     </style>
+    <script>window.__GCP_OAUTH_CLIENT_ID = "301669138946-nj73d13e77ophh5ahbbr5fd6einb415b.apps.googleusercontent.com";</script>
   </head>
   <body>
     <div id="root"></div>
