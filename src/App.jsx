@@ -3749,6 +3749,61 @@ const AZURE_CHECKS = [
 ];
 const AZURE_CATS = [...new Set(AZURE_CHECKS.map(c=>c.cat))];
 
+// =============================================
+// GCP SECURITY CHECKS (40 checks)
+// =============================================
+const GCP_CHECKS = [
+  // IAM (10)
+  {id:"gcp_iam_01",cat:"IAM",name:"No user-managed service account keys",iso:"A.5.17",sev:"HIGH",gapQ:"C7"},
+  {id:"gcp_iam_02",cat:"IAM",name:"No public (allUsers) IAM bindings",iso:"A.5.15",sev:"CRITICAL",gapQ:"C7"},
+  {id:"gcp_iam_03",cat:"IAM",name:"No Owner/Editor on service accounts",iso:"A.5.15",sev:"HIGH",gapQ:"C7"},
+  {id:"gcp_iam_04",cat:"IAM",name:"Minimal primitive role usage",iso:"A.5.15",sev:"MEDIUM",gapQ:"C7"},
+  {id:"gcp_iam_05",cat:"IAM",name:"Separation of duties enforced",iso:"A.5.3",sev:"HIGH",gapQ:"C7"},
+  {id:"gcp_iam_06",cat:"IAM",name:"Default service account not used",iso:"A.5.18",sev:"HIGH",gapQ:"C7"},
+  {id:"gcp_iam_07",cat:"IAM",name:"API keys restricted",iso:"A.5.17",sev:"HIGH",gapQ:"C7"},
+  {id:"gcp_iam_08",cat:"IAM",name:"Domain-restricted sharing",iso:"A.5.15",sev:"MEDIUM",gapQ:"C7"},
+  {id:"gcp_iam_09",cat:"IAM",name:"Service account keys rotated (<90d)",iso:"A.5.17",sev:"HIGH",gapQ:"C7"},
+  {id:"gcp_iam_10",cat:"IAM",name:"Org policy constraints configured",iso:"A.5.1",sev:"MEDIUM",gapQ:"C7"},
+  // Logging (5)
+  {id:"gcp_log_01",cat:"Logging",name:"Cloud Audit Logs enabled",iso:"A.8.15",sev:"CRITICAL",gapQ:"C3"},
+  {id:"gcp_log_02",cat:"Logging",name:"Audit logs for all services",iso:"A.8.15",sev:"HIGH",gapQ:"C3"},
+  {id:"gcp_log_03",cat:"Logging",name:"Log sinks configured (export)",iso:"A.8.15",sev:"HIGH",gapQ:"C3"},
+  {id:"gcp_log_04",cat:"Logging",name:"Log-based metrics defined",iso:"A.8.16",sev:"MEDIUM",gapQ:"C3"},
+  {id:"gcp_log_05",cat:"Logging",name:"Alert policies configured",iso:"A.8.16",sev:"HIGH",gapQ:"C3"},
+  // Storage (5)
+  {id:"gcp_str_01",cat:"Storage",name:"No public Cloud Storage buckets",iso:"A.8.3",sev:"CRITICAL",gapQ:"C5"},
+  {id:"gcp_str_02",cat:"Storage",name:"Encryption at rest (default)",iso:"A.8.24",sev:"HIGH",gapQ:"C5"},
+  {id:"gcp_str_03",cat:"Storage",name:"Uniform bucket-level access",iso:"A.8.3",sev:"HIGH",gapQ:"C5"},
+  {id:"gcp_str_04",cat:"Storage",name:"Object versioning enabled",iso:"A.8.13",sev:"MEDIUM",gapQ:"C5"},
+  {id:"gcp_str_05",cat:"Storage",name:"Retention policy configured",iso:"A.8.10",sev:"MEDIUM",gapQ:"C5"},
+  // Compute (5)
+  {id:"gcp_cmp_01",cat:"Compute",name:"Serial port access disabled",iso:"A.8.9",sev:"HIGH",gapQ:null},
+  {id:"gcp_cmp_02",cat:"Compute",name:"IP forwarding disabled",iso:"A.8.20",sev:"MEDIUM",gapQ:null},
+  {id:"gcp_cmp_03",cat:"Compute",name:"OS Login enabled for VMs",iso:"A.5.16",sev:"HIGH",gapQ:null},
+  {id:"gcp_cmp_04",cat:"Compute",name:"Shielded VM enabled (vTPM)",iso:"A.8.9",sev:"MEDIUM",gapQ:null},
+  {id:"gcp_cmp_05",cat:"Compute",name:"No public IP on VMs",iso:"A.8.20",sev:"HIGH",gapQ:null},
+  // Network (5)
+  {id:"gcp_net_01",cat:"Network",name:"No firewall allows 0.0.0.0/0 to SSH",iso:"A.8.20",sev:"CRITICAL",gapQ:null},
+  {id:"gcp_net_02",cat:"Network",name:"No firewall allows 0.0.0.0/0 to RDP",iso:"A.8.20",sev:"CRITICAL",gapQ:null},
+  {id:"gcp_net_03",cat:"Network",name:"No overly permissive firewall rules",iso:"A.8.20",sev:"CRITICAL",gapQ:null},
+  {id:"gcp_net_04",cat:"Network",name:"SSL policy enforces TLS 1.2+",iso:"A.8.24",sev:"HIGH",gapQ:null},
+  {id:"gcp_net_05",cat:"Network",name:"Private Google Access enabled",iso:"A.8.22",sev:"MEDIUM",gapQ:null},
+  // Database (5)
+  {id:"gcp_db_01",cat:"Database",name:"Cloud SQL encryption at rest",iso:"A.8.24",sev:"HIGH",gapQ:null},
+  {id:"gcp_db_02",cat:"Database",name:"Cloud SQL automated backups",iso:"A.8.13",sev:"HIGH",gapQ:null},
+  {id:"gcp_db_03",cat:"Database",name:"Cloud SQL no public IP",iso:"A.8.20",sev:"CRITICAL",gapQ:null},
+  {id:"gcp_db_04",cat:"Database",name:"Cloud SQL requires SSL",iso:"A.8.24",sev:"HIGH",gapQ:null},
+  {id:"gcp_db_05",cat:"Database",name:"No 0.0.0.0/0 authorized networks",iso:"A.8.20",sev:"CRITICAL",gapQ:null},
+  // KMS (3)
+  {id:"gcp_kms_01",cat:"KMS",name:"KMS key rotation enabled",iso:"A.8.24",sev:"HIGH",gapQ:null},
+  {id:"gcp_kms_02",cat:"KMS",name:"Key destruction protection",iso:"A.8.24",sev:"MEDIUM",gapQ:null},
+  {id:"gcp_kms_03",cat:"KMS",name:"KMS separation of duties",iso:"A.5.3",sev:"MEDIUM",gapQ:null},
+  // Security (2)
+  {id:"gcp_sec_01",cat:"Security",name:"Security Command Center enabled",iso:"A.5.7",sev:"HIGH",gapQ:null},
+  {id:"gcp_sec_02",cat:"Security",name:"SCC findings reviewed",iso:"A.8.8",sev:"HIGH",gapQ:null},
+];
+const GCP_CATS = [...new Set(GCP_CHECKS.map(c=>c.cat))];
+
 // Azure setup commands
 const AZ_SETUP_COMMANDS = {
   createApp: `az ad app create --display-name "SecComply-Scanner" --query appId -o tsv`,
@@ -3952,6 +4007,11 @@ const CLOUD_GAP_MAP = {
     C6:{name:"Azure Policy",checks:["az_pol_01","az_pol_02"]},
     C7:{name:"Identity & Access",checks:["az_iam_01","az_iam_02","az_iam_03","az_iam_04","az_iam_05","az_iam_06","az_iam_07","az_iam_08","az_iam_09","az_iam_10","az_sso_01"]},
   },
+  gcp: {
+    C3:{name:"Logging & Monitoring",checks:["gcp_log_01","gcp_log_02","gcp_log_03","gcp_log_04","gcp_log_05"]},
+    C5:{name:"Storage Security",checks:["gcp_str_01","gcp_str_02","gcp_str_03","gcp_str_04","gcp_str_05"]},
+    C7:{name:"IAM & Access",checks:["gcp_iam_01","gcp_iam_02","gcp_iam_03","gcp_iam_04","gcp_iam_05","gcp_iam_06","gcp_iam_07","gcp_iam_08","gcp_iam_09","gcp_iam_10"]},
+  },
 };
 
 const parseAwsScan = (raw) => {
@@ -4071,23 +4131,28 @@ const parseAwsScan = (raw) => {
 const CloudIntegration = ({data, setData, role: userRole}) => {
   const [toast, setToast] = useState(null);
   const [tab, setTab] = useState("dashboard");
-  const [provider, setProvider] = useState("aws"); // "aws" | "azure"
+  const [provider, setProvider] = useState("aws"); // "aws" | "azure" | "gcp"
   const [expandCat, setExpandCat] = useState(null);
   const [copied, setCopied] = useState({});
   const [filterSev, setFilterSev] = useState("ALL");
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [awsCreds, setAwsCreds] = useState({accessKeyId:"", secretAccessKey:"", region:"ap-south-1"});
   const [azureCreds, setAzureCreds] = useState({tenantId:"", clientId:"", clientSecret:"", subscriptionId:""});
+  const [gcpCreds, setGcpCreds] = useState({projectId:"", clientEmail:"", privateKey:""});
+  const [gcpAuthMethod, setGcpAuthMethod] = useState("key"); // "key" | "oauth"
+  const [gcpOAuthToken, setGcpOAuthToken] = useState(null);
+  const [gcpOAuthUser, setGcpOAuthUser] = useState(null);
+  const [gcpProjects, setGcpProjects] = useState([]);
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState({pct:0, msg:""});
-  const [connected, setConnected] = useState({aws:false, azure:false});
-  const [connectedAccount, setConnectedAccount] = useState({aws:"", azure:""});
+  const [connected, setConnected] = useState({aws:false, azure:false, gcp:false});
+  const [connectedAccount, setConnectedAccount] = useState({aws:"", azure:"", gcp:""});
   const canManage = canEdit(userRole || "client_user", "cloud");
   const {user} = useAuth();
 
   // Provider-aware computed values
-  const CHECKS = provider === "aws" ? AWS_CHECKS : AZURE_CHECKS;
-  const CATS = provider === "aws" ? AWS_CATS : AZURE_CATS;
+  const CHECKS = provider === "aws" ? AWS_CHECKS : provider === "azure" ? AZURE_CHECKS : GCP_CHECKS;
+  const CATS = provider === "aws" ? AWS_CATS : provider === "azure" ? AZURE_CATS : GCP_CATS;
   const GAP_MAP = CLOUD_GAP_MAP[provider] || {};
 
   const scans = (data.cloudScans || []).filter(s => s.provider === provider);
@@ -4174,8 +4239,101 @@ const CloudIntegration = ({data, setData, role: userRole}) => {
   };
 
   // Convenience wrappers
-  const testConnection = () => provider === "aws" ? testAwsConnection() : testAzureConnection();
-  const handleLiveScan = () => provider === "aws" ? handleAwsScan() : handleAzureScan();
+  const testConnection = () => provider === "aws" ? testAwsConnection() : provider === "azure" ? testAzureConnection() : testGcpConnection();
+  const handleLiveScan = () => provider === "aws" ? handleAwsScan() : provider === "azure" ? handleAzureScan() : handleGcpScan();
+
+  // ---- GCP OAuth Sign-in ----
+  const GCP_OAUTH_CLIENT_ID = window.__GCP_OAUTH_CLIENT_ID || ""; // Set in site env or replace here
+  const gcpOAuthSignIn = () => {
+    const doAuth = () => {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: GCP_OAUTH_CLIENT_ID,
+        scope: "https://www.googleapis.com/auth/cloud-platform.read-only https://www.googleapis.com/auth/userinfo.email",
+        callback: async (response) => {
+          if (response.error) { setToast({msg:`Google OAuth error: ${response.error}`,type:"error"}); return; }
+          if (response.access_token) {
+            setGcpOAuthToken(response.access_token);
+            setToast({msg:"Google sign-in successful! Loading projects...",type:"success"});
+            try {
+              // Get user email
+              const uResp = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {headers:{Authorization:`Bearer ${response.access_token}`}});
+              if (uResp.ok) { const u = await uResp.json(); setGcpOAuthUser(u.email); }
+              // List projects
+              const resp = await fetch("/api/gcp/test", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accessToken:response.access_token})});
+              const d = await resp.json();
+              if (d.projects && d.projects.length > 0) {
+                setGcpProjects(d.projects);
+                setGcpCreds(c => ({...c, projectId: d.projects[0].projectId}));
+                setToast({msg:`Found ${d.projects.length} project(s)!`,type:"success"});
+              } else { setToast({msg:"No accessible GCP projects found. Ensure your account has Viewer role.",type:"error"}); }
+            } catch(e) { setToast({msg:`Failed to list projects: ${e.message}`,type:"error"}); }
+          }
+        },
+      });
+      client.requestAccessToken();
+    };
+    if (window.google?.accounts?.oauth2) { doAuth(); }
+    else {
+      const s = document.createElement("script");
+      s.src = "https://accounts.google.com/gsi/client";
+      s.onload = doAuth;
+      s.onerror = () => setToast({msg:"Failed to load Google sign-in. Check network connection.",type:"error"});
+      document.head.appendChild(s);
+    }
+  };
+
+  // ---- GCP Test Connection ----
+  const testGcpConnection = async () => {
+    let body;
+    if (gcpAuthMethod === "oauth") {
+      if (!gcpOAuthToken || !gcpCreds.projectId) { setToast({msg:"Sign in with Google and select a project first",type:"error"}); return; }
+      body = { accessToken: gcpOAuthToken, projectId: gcpCreds.projectId };
+    } else {
+      const {projectId,clientEmail,privateKey} = gcpCreds;
+      if (!projectId||!clientEmail||!privateKey) { setToast({msg:"Enter Project ID, Client Email, and Private Key",type:"error"}); return; }
+      body = gcpCreds;
+    }
+    try {
+      setScanning(true); setScanProgress({pct:10,msg:"Testing GCP connection..."});
+      const resp = await fetch("/api/gcp/test", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      const d = await resp.json();
+      if (!resp.ok) throw new Error(d.error || "Connection failed");
+      setConnected(c => ({...c,gcp:true})); setConnectedAccount(a => ({...a,gcp:d.projectName||d.projectId}));
+      setToast({msg:`Connected to GCP project: ${d.projectName||d.projectId}`,type:"success"});
+    } catch(e) {
+      setConnected(c => ({...c,gcp:false})); setConnectedAccount(a => ({...a,gcp:""}));
+      setToast({msg:`GCP connection failed: ${e.message}`,type:"error"});
+    } finally { setScanning(false); }
+  };
+
+  // ---- GCP Full Scan ----
+  const handleGcpScan = async () => {
+    let body;
+    if (gcpAuthMethod === "oauth") {
+      if (!gcpOAuthToken || !gcpCreds.projectId) { setToast({msg:"Sign in with Google and select a project first",type:"error"}); return; }
+      body = { accessToken: gcpOAuthToken, projectId: gcpCreds.projectId };
+    } else {
+      const {projectId,clientEmail,privateKey} = gcpCreds;
+      if (!projectId||!clientEmail||!privateKey) { setToast({msg:"Enter all GCP credentials first",type:"error"}); return; }
+      body = gcpCreds;
+    }
+    try {
+      setScanning(true); setScanProgress({pct:5,msg:"Starting GCP scan — this takes 30-60 seconds..."});
+      const progressTimer = setInterval(() => {
+        setScanProgress(p => ({pct: Math.min(p.pct + 3, 90), msg: p.pct < 20 ? "Scanning IAM & Policies..." : p.pct < 40 ? "Scanning Storage, Logging..." : p.pct < 60 ? "Scanning Compute, Network..." : p.pct < 80 ? "Scanning Database, KMS..." : "Finalizing..."}));
+      }, 2000);
+      const resp = await fetch("/api/gcp/scan", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      clearInterval(progressTimer);
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.error || "Scan failed");
+      setScanProgress({pct:100,msg:"Scan complete!"});
+      const scan = {id:`scan_${Date.now()}`,provider:"gcp",date:result.scannedAt||new Date().toISOString(),account:result.projectName||result.projectId||"Unknown",region:"Global",results:result.results,overrides:{},scannedBy:user?.email||"unknown",scanType:"live"};
+      setData(d => ({...d, cloudScans: [...(d.cloudScans || []), scan]}));
+      setConnected(c => ({...c,gcp:true})); setConnectedAccount(a => ({...a,gcp:result.projectName||result.projectId}));
+      setToast({msg:`GCP scan complete! ${result.summary?.pass||0} passed, ${result.summary?.fail||0} failed.`,type:"success"});
+      setTab("checks");
+    } catch(e) { setToast({msg:`GCP scan failed: ${e.message}`,type:"error"}); } finally { setScanning(false); }
+  };
 
   const handleUpload = (file) => {
     const reader = new FileReader();
@@ -4232,7 +4390,7 @@ const CloudIntegration = ({data, setData, role: userRole}) => {
   // Push evidence to gap assessment (provider-aware)
   const pushToGap = () => {
     const updates = {};
-    const provLabel = provider === "aws" ? "AWS" : "Azure";
+    const provLabel = provider === "aws" ? "AWS" : provider === "azure" ? "Azure" : "GCP";
     Object.entries(GAP_MAP).forEach(([qId, {name, checks: checkIds}]) => {
       const statuses = checkIds.map(id => ({id, name: (CHECKS.find(c => c.id === id)||{}).name, status: getStatus(id)}));
       const pass = statuses.filter(s => s.status === "PASS").length;
@@ -4285,8 +4443,8 @@ const CloudIntegration = ({data, setData, role: userRole}) => {
 
   const isConn = connected[provider];
   const connAcct = connectedAccount[provider];
-  const providerLabel = provider === "aws" ? "AWS" : "Azure";
-  const providerColor = provider === "aws" ? C.orange : "#0078D4";
+  const providerLabel = provider === "aws" ? "AWS" : provider === "azure" ? "Azure" : "GCP";
+  const providerColor = provider === "aws" ? C.orange : provider === "azure" ? "#0078D4" : "#4285F4";
   const TABS = [{id:"dashboard",label:"Dashboard",icon:LayoutDashboard},{id:"checks",label:"Security Checks",icon:Shield},{id:"connect",label:`Connect ${providerLabel}`,icon:Cloud},{id:"evidence",label:"Gap Evidence",icon:ClipboardCheck}];
 
   return (<div>
@@ -4307,7 +4465,7 @@ const CloudIntegration = ({data, setData, role: userRole}) => {
 
     {/* Provider Switcher */}
     <div style={{display:"flex",gap:6,marginBottom:12}}>
-      {[{id:"aws",label:"AWS",color:C.orange,icon:"🔶"},{id:"azure",label:"Azure",color:"#0078D4",icon:"🔷"}].map(p => (
+      {[{id:"aws",label:"AWS",color:C.orange,icon:"🔶"},{id:"azure",label:"Azure",color:"#0078D4",icon:"🔷"},{id:"gcp",label:"GCP",color:"#4285F4",icon:"🟢"}].map(p => (
         <button key={p.id} onClick={() => { setProvider(p.id); setTab("dashboard"); }} style={{padding:"8px 18px",borderRadius:8,border: provider===p.id ? `2px solid ${p.color}` : `1px solid ${C.border}`,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight: provider===p.id ? 800 : 500,background: provider===p.id ? `${p.color}15` : C.card,color: provider===p.id ? p.color : C.textMuted,display:"flex",alignItems:"center",gap:6,transition:"all 0.2s"}}>{p.icon} {p.label} {connected[p.id] && <CheckCircle size={12} color={C.green}/>}</button>
       ))}
     </div>
@@ -4349,7 +4507,7 @@ const CloudIntegration = ({data, setData, role: userRole}) => {
 
         {/* Scan info */}
         <div style={{background:C.card,borderRadius:10,border:`1px solid ${C.border}`,padding:"10px 16px",marginBottom:16,display:"flex",gap:20,alignItems:"center",fontSize:12,flexWrap:"wrap"}}>
-          <span style={{color:C.textMuted}}>{provider === "aws" ? "🔶" : "🔷"} <strong style={{color:C.text}}>{providerLabel}</strong> {provider === "aws" ? "Account" : "Subscription"}: <strong style={{color:providerColor}}>{latestScan.account}</strong></span>
+          <span style={{color:C.textMuted}}>{provider === "aws" ? "🔶" : provider === "azure" ? "🔷" : "🟢"} <strong style={{color:C.text}}>{providerLabel}</strong> {provider === "aws" ? "Account" : provider === "azure" ? "Subscription" : "Project"}: <strong style={{color:providerColor}}>{latestScan.account}</strong></span>
           <span style={{color:C.textMuted}}>{provider === "aws" ? "Region" : "Scope"}: <strong style={{color:C.text}}>{latestScan.region}</strong></span>
           <span style={{color:C.textMuted}}>Scanned: <strong style={{color:C.text}}>{new Date(latestScan.date).toLocaleString()}</strong></span>
           <span style={{color:C.textMuted}}>By: <strong style={{color:C.text}}>{latestScan.scannedBy}</strong></span>
@@ -4637,6 +4795,191 @@ const CloudIntegration = ({data, setData, role: userRole}) => {
               ))}
             </div>
           </Card>
+        </>)}
+
+        {/* ===== GCP CONNECT ===== */}
+        {provider === "gcp" && (<>
+          {/* Auth Method Toggle */}
+          <Card>
+            <div style={{marginBottom:12}}>
+              <h3 style={{margin:"0 0 8px",fontSize:16,fontWeight:800,color:C.text}}>Authentication Method</h3>
+              <p style={{color:C.textMuted,fontSize:12,margin:0}}>Choose how to authenticate with GCP. Use <strong style={{color:"#4285F4"}}>Google Sign-in</strong> if your organization blocks service account key creation.</p>
+            </div>
+            <div style={{display:"flex",gap:4,background:C.bg,borderRadius:10,padding:4}}>
+              {[{id:"key",label:"🔑 Service Account Key",desc:"Paste key from JSON file"},{id:"oauth",label:"🔐 Google Sign-in",desc:"OAuth — no keys needed"}].map(m => (
+                <button key={m.id} onClick={()=>setGcpAuthMethod(m.id)} style={{flex:1,padding:"10px 14px",borderRadius:8,border:gcpAuthMethod===m.id?`2px solid #4285F4`:`1px solid ${C.border}`,cursor:"pointer",fontFamily:"inherit",background:gcpAuthMethod===m.id?"#4285F422":"transparent",textAlign:"left",transition:"all 0.15s"}}>
+                  <div style={{fontSize:13,fontWeight:gcpAuthMethod===m.id?800:500,color:gcpAuthMethod===m.id?"#4285F4":C.text}}>{m.label}</div>
+                  <div style={{fontSize:10,color:C.textDim,marginTop:2}}>{m.desc}</div>
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          {/* OAuth Method */}
+          {gcpAuthMethod === "oauth" && (<>
+            <Card style={{marginTop:12}}>
+              <div style={{marginBottom:16}}>
+                <h3 style={{margin:"0 0 8px",fontSize:16,fontWeight:800,color:C.text,display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{background:"#4285F4",color:"#fff",width:24,height:24,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800}}>1</span>
+                  Sign in with Google
+                </h3>
+                <p style={{color:C.textMuted,fontSize:12,margin:0,lineHeight:1.6}}>Sign in with a Google account that has <strong style={{color:"#4285F4"}}>Viewer</strong> or <strong style={{color:"#4285F4"}}>Security Reviewer</strong> role on the GCP project you want to scan. No service account keys needed.</p>
+              </div>
+              {!gcpOAuthToken ? (
+                <div>
+                  {!GCP_OAUTH_CLIENT_ID ? (
+                    <div style={{padding:16,background:`${C.yellow}10`,borderRadius:10,border:`1px solid ${C.yellow}33`}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.yellow,marginBottom:8}}>⚠️ OAuth Client ID Required</div>
+                      <div style={{fontSize:12,color:C.textMuted,lineHeight:1.7}}>
+                        To enable Google Sign-in, create an OAuth 2.0 Client ID:
+                        <div style={{marginTop:8,background:"#0a0e17",borderRadius:8,padding:10}}>
+                          <div style={{fontSize:11,color:C.textDim,marginBottom:6}}>1. Go to <strong style={{color:"#4285F4"}}>GCP Console → APIs & Credentials → Create Credentials → OAuth Client ID</strong></div>
+                          <div style={{fontSize:11,color:C.textDim,marginBottom:6}}>2. Application type: <strong style={{color:C.green}}>Web application</strong></div>
+                          <div style={{fontSize:11,color:C.textDim,marginBottom:6}}>3. Authorized JavaScript origins: <code style={{background:`${C.blue}22`,padding:"1px 4px",borderRadius:3,color:C.blue}}>{window.location.origin}</code></div>
+                          <div style={{fontSize:11,color:C.textDim}}>4. Set the Client ID: <code style={{background:`${C.blue}22`,padding:"1px 4px",borderRadius:3,color:C.blue}}>window.__GCP_OAUTH_CLIENT_ID = "your-id.apps.googleusercontent.com"</code></div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={gcpOAuthSignIn} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 24px",background:"#fff",border:"1px solid #dadce0",borderRadius:8,cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:500,color:"#3c4043",boxShadow:"0 1px 3px rgba(0,0,0,0.08)"}}>
+                      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                      Sign in with Google
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div style={{padding:12,background:`${C.green}10`,borderRadius:8,border:`1px solid ${C.green}33`,display:"flex",alignItems:"center",gap:10}}>
+                  <CheckCircle size={16} color={C.green}/>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.green}}>Signed in as {gcpOAuthUser||"Google User"}</div>
+                    <div style={{fontSize:11,color:C.textDim}}>Access token obtained. Select a project below.</div>
+                  </div>
+                  <button onClick={()=>{setGcpOAuthToken(null);setGcpOAuthUser(null);setGcpProjects([]);}} style={{marginLeft:"auto",padding:"4px 10px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,fontSize:10,fontWeight:700,color:C.textMuted,cursor:"pointer",fontFamily:"inherit"}}>Sign Out</button>
+                </div>
+              )}
+            </Card>
+
+            {gcpOAuthToken && (
+              <Card style={{marginTop:12}}>
+                <div style={{marginBottom:16}}>
+                  <h3 style={{margin:"0 0 8px",fontSize:16,fontWeight:800,color:C.text,display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{background:"#4285F4",color:"#fff",width:24,height:24,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800}}>2</span>
+                    Select Project & Scan
+                  </h3>
+                </div>
+                <div style={{marginBottom:12}}>
+                  <label style={{fontSize:11,fontWeight:700,color:C.textMuted,marginBottom:4,display:"block"}}>GCP Project</label>
+                  {gcpProjects.length > 0 ? (
+                    <select value={gcpCreds.projectId} onChange={e=>setGcpCreds(c=>({...c,projectId:e.target.value}))} style={{width:"100%",padding:"10px 12px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,fontFamily:"inherit",boxSizing:"border-box"}}>
+                      {gcpProjects.map(p => <option key={p.projectId} value={p.projectId}>{p.name} ({p.projectId})</option>)}
+                    </select>
+                  ) : (
+                    <input value={gcpCreds.projectId} onChange={e=>setGcpCreds(c=>({...c,projectId:e.target.value.trim()}))} placeholder="Enter project ID manually" style={{width:"100%",padding:"10px 12px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,fontFamily:"'Courier New',monospace",boxSizing:"border-box"}}/>
+                  )}
+                </div>
+                {scanning && <div style={{marginBottom:16}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:11,color:C.textMuted}}>{scanProgress.msg}</span><span style={{fontSize:11,fontWeight:700,color:"#4285F4"}}>{scanProgress.pct}%</span></div><div style={{height:6,background:C.border,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${scanProgress.pct}%`,background:"#4285F4",borderRadius:3,transition:"width 0.3s"}}/></div></div>}
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <Btn variant="secondary" onClick={testConnection} disabled={scanning || !gcpCreds.projectId}>{connected.gcp ? <><CheckCircle size={14} color={C.green}/> Connected ({connectedAccount.gcp})</> : "Test Connection"}</Btn>
+                  <Btn onClick={handleLiveScan} disabled={scanning || !gcpCreds.projectId}>{scanning ? `Scanning (${scanProgress.pct}%)...` : <><Zap size={14}/> Run Full Scan (40 checks)</>}</Btn>
+                </div>
+              </Card>
+            )}
+          </>)}
+
+          {/* Service Account Key Method */}
+          {gcpAuthMethod === "key" && (<>
+          {/* Step 1: Create Service Account */}
+          <Card>
+            <div style={{marginBottom:16}}>
+              <h3 style={{margin:"0 0 8px",fontSize:16,fontWeight:800,color:C.text,display:"flex",alignItems:"center",gap:6}}>
+                <span style={{background:"#4285F4",color:"#fff",width:24,height:24,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800}}>1</span>
+                Create Service Account
+              </h3>
+              <p style={{color:C.textMuted,fontSize:12,margin:0,lineHeight:1.6}}>Open <strong style={{color:C.text}}>GCP Cloud Shell</strong> and run these commands. This creates a read-only service account with <strong style={{color:"#4285F4"}}>Viewer</strong> + <strong style={{color:"#4285F4"}}>Security Reviewer</strong> roles.</p>
+            </div>
+            {[
+              {label:"Step 1a: Set your project",cmd:`gcloud config set project YOUR_PROJECT_ID`,key:"gcpProj"},
+              {label:"Step 1b: Create service account",cmd:`gcloud iam service-accounts create seccomply-scanner --display-name="SecComply Scanner" --description="Read-only access for security scanning"`,key:"gcpSa"},
+              {label:"Step 1c: Assign Viewer role",cmd:`gcloud projects add-iam-policy-binding $(gcloud config get-value project) --member="serviceAccount:seccomply-scanner@$(gcloud config get-value project).iam.gserviceaccount.com" --role="roles/viewer"`,key:"gcpViewer"},
+              {label:"Step 1d: Assign Security Reviewer role",cmd:`gcloud projects add-iam-policy-binding $(gcloud config get-value project) --member="serviceAccount:seccomply-scanner@$(gcloud config get-value project).iam.gserviceaccount.com" --role="roles/iam.securityReviewer"`,key:"gcpSecRev"},
+              {label:"Step 1e: Generate JSON key",cmd:`gcloud iam service-accounts keys create seccomply-key.json --iam-account=seccomply-scanner@$(gcloud config get-value project).iam.gserviceaccount.com && cat seccomply-key.json`,key:"gcpKey"},
+            ].map(step => (
+              <div key={step.key} style={{marginBottom:10}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#4285F4",marginBottom:4}}>{step.label}</div>
+                <div style={{background:"#0a0e17",borderRadius:8,border:`1px solid ${C.border}`,padding:10,position:"relative"}}>
+                  <pre style={{margin:0,fontSize:10,color:C.green,fontFamily:"'Courier New',monospace",whiteSpace:"pre-wrap",wordBreak:"break-all"}}>{step.cmd}</pre>
+                  <button onClick={() => copyText(step.cmd, step.key)} style={{position:"absolute",top:6,right:6,padding:"3px 8px",background:copied[step.key]?C.green:"#4285F4",color:"#fff",border:"none",borderRadius:5,fontSize:9,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{copied[step.key] ? "✓" : "Copy"}</button>
+                </div>
+              </div>
+            ))}
+          </Card>
+
+          {/* Step 2: Enter Credentials & Scan */}
+          <Card style={{marginTop:12}}>
+            <div style={{marginBottom:16}}>
+              <h3 style={{margin:"0 0 8px",fontSize:16,fontWeight:800,color:C.text,display:"flex",alignItems:"center",gap:6}}>
+                <span style={{background:"#4285F4",color:"#fff",width:24,height:24,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800}}>2</span>
+                Enter Credentials & Scan
+              </h3>
+              <p style={{color:C.textMuted,fontSize:12,margin:0}}>Copy the values from the JSON key file (Step 1e) below. Credentials are sent to your backend server — <strong style={{color:C.green}}>never stored anywhere</strong>.</p>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:C.textMuted,marginBottom:4,display:"block"}}>Project ID</label>
+                <input value={gcpCreds.projectId} onChange={e => setGcpCreds(c => ({...c, projectId: e.target.value.trim()}))} placeholder="my-project-123456" style={{width:"100%",padding:"10px 12px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,fontFamily:"'Courier New',monospace",boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:C.textMuted,marginBottom:4,display:"block"}}>Client Email (Service Account)</label>
+                <input value={gcpCreds.clientEmail} onChange={e => setGcpCreds(c => ({...c, clientEmail: e.target.value.trim()}))} placeholder="seccomply-scanner@project.iam.gserviceaccount.com" style={{width:"100%",padding:"10px 12px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,fontFamily:"'Courier New',monospace",boxSizing:"border-box"}}/>
+              </div>
+            </div>
+            <div style={{marginBottom:16}}>
+              <label style={{fontSize:11,fontWeight:700,color:C.textMuted,marginBottom:4,display:"block"}}>Private Key (from JSON key file)</label>
+              <textarea value={gcpCreds.privateKey} onChange={e => setGcpCreds(c => ({...c, privateKey: e.target.value}))} placeholder="-----BEGIN PRIVATE KEY-----\nMIIEvg..." style={{width:"100%",minHeight:80,padding:"10px 12px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:11,fontFamily:"'Courier New',monospace",boxSizing:"border-box",resize:"vertical"}}/>
+              <div style={{fontSize:10,color:C.textDim,marginTop:4}}>Paste the entire <code style={{background:`${C.blue}22`,padding:"1px 4px",borderRadius:3,color:C.blue}}>private_key</code> field value from the JSON file (including BEGIN/END markers)</div>
+            </div>
+            <div style={{marginBottom:12,padding:"10px 14px",background:`${C.blue}10`,borderRadius:8,border:`1px solid ${C.blue}22`,fontSize:11,color:C.textMuted}}>
+              <strong style={{color:C.blue}}>Or paste the entire JSON key file:</strong> You can also paste the full JSON and we'll extract the fields automatically.
+              <div style={{marginTop:6}}><button onClick={() => {
+                try {
+                  const key = JSON.parse(gcpCreds.privateKey || "{}");
+                  if (key.project_id && key.client_email && key.private_key) {
+                    setGcpCreds({projectId: key.project_id, clientEmail: key.client_email, privateKey: key.private_key});
+                    setToast({msg: "JSON key parsed! Fields auto-filled.", type: "success"});
+                  } else { setToast({msg: "Invalid JSON — missing required fields", type: "error"}); }
+                } catch { setToast({msg: "Paste the full JSON key file in the Private Key field first", type: "error"}); }
+              }} style={{padding:"4px 12px",background:"#4285F4",color:"#fff",border:"none",borderRadius:6,fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Parse JSON Key</button></div>
+            </div>
+            {scanning && <div style={{marginBottom:16}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:11,color:C.textMuted}}>{scanProgress.msg}</span><span style={{fontSize:11,fontWeight:700,color:"#4285F4"}}>{scanProgress.pct}%</span></div><div style={{height:6,background:C.border,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${scanProgress.pct}%`,background:"#4285F4",borderRadius:3,transition:"width 0.3s"}}/></div></div>}
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <Btn variant="secondary" onClick={testConnection} disabled={scanning || !gcpCreds.projectId}>{connected.gcp ? <><CheckCircle size={14} color={C.green}/> Connected ({connectedAccount.gcp})</> : "Test Connection"}</Btn>
+              <Btn onClick={handleLiveScan} disabled={scanning || !gcpCreds.projectId || !gcpCreds.clientEmail || !gcpCreds.privateKey}>{scanning ? `Scanning (${scanProgress.pct}%)...` : <><Zap size={14}/> Run Full Scan (40 checks)</>}</Btn>
+            </div>
+            {connected.gcp && !scanning && <div style={{marginTop:12,padding:10,background:`${C.green}10`,borderRadius:8,border:`1px solid ${C.green}33`,fontSize:12,color:C.green,display:"flex",alignItems:"center",gap:6}}><CheckCircle size={14}/> <strong>Connected</strong> to GCP project {connectedAccount.gcp}</div>}
+          </Card>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:12}}>
+            <Card>
+              <h4 style={{margin:"0 0 6px",fontSize:13,fontWeight:700,color:C.text}}>🧹 Cleanup (After Scanning)</h4>
+              <p style={{color:C.textDim,fontSize:11,margin:"0 0 8px"}}>Remove the service account when done:</p>
+              <div style={{background:"#0a0e17",borderRadius:8,border:`1px solid ${C.border}`,padding:10,position:"relative"}}>
+                <pre style={{margin:0,fontSize:10,color:C.red,fontFamily:"'Courier New',monospace",whiteSpace:"pre-wrap"}}>{`gcloud iam service-accounts delete seccomply-scanner@$(gcloud config get-value project).iam.gserviceaccount.com`}</pre>
+                <button onClick={() => copyText(`gcloud iam service-accounts delete seccomply-scanner@$(gcloud config get-value project).iam.gserviceaccount.com`,"gcpCleanup")} style={{position:"absolute",top:6,right:6,padding:"3px 8px",background:copied.gcpCleanup?C.green:"#4285F4",color:"#fff",border:"none",borderRadius:5,fontSize:9,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{copied.gcpCleanup ? "✓" : "Copy"}</button>
+              </div>
+            </Card>
+            <Card>
+              <h4 style={{margin:"0 0 6px",fontSize:13,fontWeight:700,color:C.text}}>🔒 Security & Permissions</h4>
+              <div style={{display:"grid",gap:6}}>
+                {[{name:"Viewer",desc:"Read-only access to GCP resources",icon:"👁️"},{name:"Security Reviewer",desc:"View IAM policies and security configs",icon:"🛡️"},{name:"Server-Side Scan",desc:"Credentials sent to backend — never stored",icon:"🔐"}].map(p => (
+                  <div key={p.name} style={{background:C.bg,borderRadius:8,border:`1px solid ${C.border}`,padding:8}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"#4285F4"}}>{p.icon} {p.name}</div>
+                    <div style={{fontSize:10,color:C.textDim,marginTop:2}}>{p.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+        </>)}
         </>)}
       </div>
     )}

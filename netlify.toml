@@ -40,6 +40,16 @@
   to = "/.netlify/functions/vendor-scan"
   status = 200
 
+[[redirects]]
+  from = "/api/gcp/test"
+  to = "/.netlify/functions/gcp-test"
+  status = 200
+
+[[redirects]]
+  from = "/api/gcp/scan"
+  to = "/.netlify/functions/gcp-scan"
+  status = 200
+
 # SPA fallback
 [[redirects]]
   from = "/*"
