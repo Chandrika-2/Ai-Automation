@@ -944,6 +944,100 @@ const SOAModule = ({data,setData}) => {
     return ts;
   },[soa]);
 
+  // ─── Control Completion % Calculator ───
+  // Maps policy IDs to SOA controls they relate to
+  const POLICY_CTRL_MAP = {
+    "acceptable_usage_policy":["A.5.10"],
+    "access_control_policy":["A.5.15","A.5.16","A.5.17","A.5.18","A.8.2","A.8.3","A.8.4","A.8.5"],
+    "access_control_procedure":["A.5.15","A.5.18","A.8.3"],
+    "asset_management_policy":["A.5.9","A.5.10","A.5.11","A.5.12","A.5.13"],
+    "asset_management_procedure":["A.5.9","A.5.11"],
+    "business_continuity_disaster_recovery_policy":["A.5.29","A.5.30","A.8.13","A.8.14"],
+    "business_continuity_plan":["A.5.29","A.5.30"],
+    "code_of_business_conduct_policy":["A.5.4","A.6.2","A.6.4"],
+    "communications_network_security_policy":["A.5.14","A.8.20","A.8.21","A.8.22","A.8.23"],
+    "compliance_policy":["A.5.31","A.5.32","A.5.33","A.5.34","A.5.35","A.5.36"],
+    "compliance_procedure":["A.5.35","A.5.36"],
+    "data_breach_notification_policy":["A.5.24","A.5.25","A.5.26","A.5.27","A.5.28","A.6.8"],
+    "data_classification_policy":["A.5.12","A.5.13"],
+    "data_protection_policy":["A.5.34","A.8.10","A.8.11","A.8.12"],
+    "data_retention_policy":["A.5.33","A.8.10"],
+    "employee_handbook_information_security":["A.5.4","A.6.1","A.6.2","A.6.3","A.6.5"],
+    "endpoint_security_policy":["A.8.1","A.8.7","A.8.8"],
+    "human_resource_security_policy":["A.6.1","A.6.2","A.6.3","A.6.4","A.6.5","A.6.6"],
+    "incident_management_policy":["A.5.24","A.5.25","A.5.26","A.5.27","A.5.28"],
+    "incident_management_procedure":["A.5.25","A.5.26"],
+    "information_security_manual":["A.5.1","A.5.2","A.5.3"],
+    "isms_roles_responsibilities":["A.5.2","A.5.3"],
+    "logging_monitoring_policy":["A.8.15","A.8.16","A.8.17"],
+    "mobile_device_teleworking_policy":["A.6.7","A.8.1"],
+    "operations_security_procedure":["A.8.6","A.8.7","A.8.8","A.8.9"],
+    "password_policy":["A.5.17","A.8.5"],
+    "physical_security_policy":["A.7.1","A.7.2","A.7.3","A.7.4","A.7.5","A.7.6","A.7.7","A.7.8","A.7.9","A.7.10","A.7.11","A.7.12","A.7.13","A.7.14"],
+    "risk_management_policy":["A.5.7","A.5.8"],
+    "secure_development_policy":["A.8.25","A.8.26","A.8.27","A.8.28","A.8.29","A.8.30","A.8.31","A.8.32","A.8.33","A.8.34"],
+    "supplier_security_policy":["A.5.19","A.5.20","A.5.21","A.5.22","A.5.23"],
+    "vulnerability_management_policy":["A.8.8"],
+    "change_management_policy":["A.8.32"],
+    "cryptography_policy":["A.8.24"],
+  };
+
+  const controlCompletion = useMemo(()=>{
+    const gapResp = data.gapResponses || {};
+    const policies = data.policies || [];
+    const risks = (data.risks || []).filter(r=>!r.disabled);
+    const evidence = data.evidenceList || [];
+    const wfRecords = data.workflowRecords || [];
+    const result = {};
+
+    SOA_CONTROLS.forEach(c=>{
+      const cState = soa[c.id];
+      const isApplicable = cState?.applicable === true;
+      const isDecided = cState?.applicable !== null && cState?.applicable !== undefined;
+      if(!isDecided) { result[c.id] = {pct:0, pillars:{soa:0,gap:0,policy:0,risk:0,evidence:0}}; return; }
+      if(!isApplicable) { result[c.id] = {pct:100, pillars:{soa:100,gap:100,policy:100,risk:100,evidence:100}, na:true}; return; }
+
+      // 1. SOA Decision (15%) — marked = 100%
+      const soaPct = 100;
+
+      // 2. Gap Assessment (30%) — % of related gap Qs answered
+      const relatedGaps = (typeof GAP_QUESTIONS !== 'undefined' ? GAP_QUESTIONS : []).filter(q=>{
+        const isoRefs = (q.iso||"").split(/[\/,]/).map(s=>s.trim().replace(/\s/g,""));
+        return isoRefs.some(ref => ref === c.id || ref.replace(/\./g,"") === c.id.replace(/\./g,""));
+      });
+      let gapPct = 0;
+      if(relatedGaps.length > 0) {
+        const answered = relatedGaps.filter(q => gapResp[q.id] && gapResp[q.id].resp && gapResp[q.id].resp !== "").length;
+        gapPct = Math.round((answered / relatedGaps.length) * 100);
+      } else {
+        gapPct = 100; // no related gap questions = N/A = full marks
+      }
+
+      // 3. Policy (25%) — any related policy exists?
+      const relatedPolicyIds = Object.entries(POLICY_CTRL_MAP).filter(([,ctrls])=>ctrls.includes(c.id)).map(([pid])=>pid);
+      let policyPct = 0;
+      if(relatedPolicyIds.length > 0) {
+        const hasPolicy = relatedPolicyIds.some(pid => policies.find(p=>p.id===pid && p.enabled !== false));
+        policyPct = hasPolicy ? 100 : 0;
+      } else {
+        policyPct = 100; // no mapped policy = N/A
+      }
+
+      // 4. Risk Register (15%) — risk linked to this control exists?
+      const linkedRisks = risks.filter(r=>(r.controls||[]).includes(c.id) || (r.linked_control||"").includes(c.id));
+      const riskPct = linkedRisks.length > 0 ? 100 : 0;
+
+      // 5. Evidence (15%) — any evidence or workflow record exists for this control domain?
+      const hasEvidence = evidence.some(e=>(e._controlRef||"").includes(c.id)) || wfRecords.some(r=>(r.isoRef||"").includes(c.id));
+      const evPct = hasEvidence ? 100 : 0;
+
+      // Weighted total: SOA 15% + Gap 30% + Policy 25% + Risk 15% + Evidence 15%
+      const total = Math.round(soaPct * 0.15 + gapPct * 0.30 + policyPct * 0.25 + riskPct * 0.15 + evPct * 0.15);
+      result[c.id] = {pct:total, pillars:{soa:soaPct,gap:gapPct,policy:policyPct,risk:riskPct,evidence:evPct}};
+    });
+    return result;
+  },[soa, data.gapResponses, data.policies, data.risks, data.evidenceList, data.workflowRecords]);
+
   // Filtered controls
   const filtered=useMemo(()=>{
     let list=SOA_CONTROLS;
@@ -959,11 +1053,11 @@ const SOAModule = ({data,setData}) => {
   const exportSOA=()=>{
     const rows=SOA_CONTROLS.map(c=>{
       const s=soa[c.id]||{};
-      return{"Control ID":c.id,"Theme":c.theme,"Control Title":c.title,"Description":c.desc,"Applicable":s.applicable===true?"Yes":s.applicable===false?"No":"Pending","Justification":s.justification||""};
+      return{"Control ID":c.id,"Theme":c.theme,"Control Title":c.title,"Description":c.desc,"Applicable":s.applicable===true?"Yes":s.applicable===false?"No":"Pending","Justification":s.justification||"","Implementation %":s.applicable===true?(controlCompletion[c.id]?.pct||0)+"%":s.applicable===false?"N/A":"\u2014"};
     });
     const wb=XLSX.utils.book_new();
     const ws=XLSX.utils.json_to_sheet(rows);
-    ws["!cols"]=[{wch:10},{wch:16},{wch:40},{wch:70},{wch:12},{wch:50}];
+    ws["!cols"]=[{wch:10},{wch:16},{wch:40},{wch:70},{wch:12},{wch:50},{wch:16}];
     XLSX.utils.book_append_sheet(wb,ws,"SOA");
 
     // Summary sheet
@@ -1026,6 +1120,15 @@ const SOAModule = ({data,setData}) => {
         <div style={{fontSize:11,color:C.textMuted,fontWeight:600}}>{s.label}</div>
         <div style={{fontSize:22,fontWeight:800,color:s.col}}>{s.val}</div>
       </div>)}
+      {(()=>{
+        const applicableControls=SOA_CONTROLS.filter(c=>soa[c.id]?.applicable===true);
+        const avgImpl=applicableControls.length>0?Math.round(applicableControls.reduce((sum,c)=>(controlCompletion[c.id]?.pct||0)+sum,0)/applicableControls.length):0;
+        const implColor=avgImpl>=80?C.green:avgImpl>=50?C.yellow:avgImpl>=25?C.orange:C.red;
+        return(<div style={{background:C.card,borderRadius:10,padding:"12px 14px",border:`1px solid ${implColor}22`}}>
+          <div style={{fontSize:11,color:C.textMuted,fontWeight:600}}>Avg Implementation</div>
+          <div style={{fontSize:22,fontWeight:800,color:implColor}}>{avgImpl}%</div>
+        </div>);
+      })()}
     </div>
 
     {/* Theme tabs */}
@@ -1058,15 +1161,23 @@ const SOAModule = ({data,setData}) => {
         const isExpanded=expandedId===c.id;
         const themeColor=(SOA_THEMES.find(t=>t.id===c.theme)||{}).color||C.textMuted;
         const needsJust=s.applicable===false&&(!s.justification||!s.justification.trim());
+        const cc=controlCompletion[c.id]||{pct:0,pillars:{soa:0,gap:0,policy:0,risk:0,evidence:0}};
+        const ccColor=cc.na?C.textDim:cc.pct>=80?C.green:cc.pct>=50?C.yellow:cc.pct>=25?C.orange:C.red;
         return(<div key={c.id} style={{background:C.card,borderRadius:10,border:`1px solid ${needsJust?`${C.red}66`:s.applicable===true?`${C.green}33`:s.applicable===false?`${C.red}22`:C.border}`,overflow:"hidden",transition:"border-color 0.2s"}}>
           {/* Row */}
           <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",cursor:"pointer"}} onClick={()=>setExpandedId(isExpanded?null:c.id)}>
             {/* Control ID badge */}
             <div style={{background:`${themeColor}18`,color:themeColor,padding:"4px 10px",borderRadius:6,fontSize:12,fontWeight:800,fontFamily:"monospace",whiteSpace:"nowrap",minWidth:52,textAlign:"center"}}>{c.id}</div>
-            {/* Title */}
+            {/* Title + completion bar */}
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.title}</div>
-              {!isExpanded&&<div style={{fontSize:11,color:C.textDim,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:500}}>{c.desc.substring(0,100)}...</div>}
+              {s.applicable===true?
+                <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}>
+                  <div style={{flex:1,height:4,background:C.bg,borderRadius:2,overflow:"hidden",maxWidth:160}}><div style={{height:"100%",width:`${cc.pct}%`,background:ccColor,borderRadius:2,transition:"width 0.3s"}}/></div>
+                  <span style={{fontSize:10,fontWeight:700,color:ccColor,minWidth:32}}>{cc.pct}%</span>
+                </div>:
+                !isExpanded&&<div style={{fontSize:11,color:C.textDim,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:500}}>{c.desc.substring(0,100)}...</div>
+              }
             </div>
             {/* Applicable / Not Applicable toggle */}
             <div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
@@ -1089,6 +1200,30 @@ const SOAModule = ({data,setData}) => {
                 {s.applicable===null&&<Badge color={C.yellow}>Pending Review</Badge>}
               </div>
               {/* Justification field — always shown when expanded, highlighted when N/A */}
+              {s.applicable===true&&<div style={{marginBottom:14}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                  <span style={{fontSize:12,fontWeight:700,color:C.text}}>Implementation Progress</span>
+                  <span style={{fontSize:14,fontWeight:800,color:ccColor}}>{cc.pct}%</span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
+                  {[
+                    {label:"SOA",val:cc.pillars.soa,w:"15%",icon:"\u2705"},
+                    {label:"Gap Assessment",val:cc.pillars.gap,w:"30%",icon:"\uD83D\uDD0D"},
+                    {label:"Policy",val:cc.pillars.policy,w:"25%",icon:"\uD83D\uDCCB"},
+                    {label:"Risk Register",val:cc.pillars.risk,w:"15%",icon:"\u26A0\uFE0F"},
+                    {label:"Evidence",val:cc.pillars.evidence,w:"15%",icon:"\uD83D\uDCC1"},
+                  ].map(p=>{
+                    const pc=p.val>=80?C.green:p.val>=50?C.yellow:p.val>0?C.orange:C.red;
+                    return(<div key={p.label} style={{background:C.bg,borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
+                      <div style={{fontSize:14,marginBottom:2}}>{p.icon}</div>
+                      <div style={{fontSize:10,color:C.textDim,marginBottom:4}}>{p.label}</div>
+                      <div style={{height:4,background:C.border,borderRadius:2,overflow:"hidden",marginBottom:4}}><div style={{height:"100%",width:`${p.val}%`,background:pc,borderRadius:2}}/></div>
+                      <div style={{fontSize:11,fontWeight:700,color:pc}}>{p.val}%</div>
+                      <div style={{fontSize:9,color:C.textDim}}>wt: {p.w}</div>
+                    </div>);
+                  })}
+                </div>
+              </div>}
               <div>
                 <label style={{display:"block",fontSize:12,color:s.applicable===false&&needsJust?C.red:C.textMuted,fontWeight:700,marginBottom:4}}>
                   {s.applicable===false?"Justification for Exclusion *":"Justification / Notes"}
